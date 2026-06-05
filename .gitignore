@@ -1,0 +1,60 @@
+# AgentWire-Core gitignore
+
+# ===== Runtime config (NEVER commit real values) =====
+# server/config.yaml may contain real AGENTWIRE_TOKEN, AGENTWIRE upstream URLs
+server/config.yaml
+server/config.local.yaml
+server/*.local.yaml
+server/*.local.json
+
+# ===== Python artifacts =====
+__pycache__/
+*.py[codz]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg
+.venv/
+venv/
+*.log
+
+# ===== Test artifacts =====
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+coverage.xml
+
+# ===== Sensitive local data =====
+.env
+.env.local
+*.pem
+*.key
+secrets/
+.private/
+.notes/
+secrets.yaml
+
+# ===== TypeScript / Node (plugin) =====
+plugin/node_modules/
+plugin/dist/
+plugin/*.tsbuildinfo
+plugin/package-lock.json.bak
+
+# ===== Backup / temp =====
+*.bak
+*.swp
+*.swo
+*.orig
+*.rej
+*.debug.log
+.git.backup-*
+
+# ===== OS-specific =====
+.DS_Store
+Thumbs.db
