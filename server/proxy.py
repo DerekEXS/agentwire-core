@@ -7,6 +7,13 @@ the real AGENTWIRE Python on 18800.
 v1.4.2: replaces the old agentwire TypeScript plugin (id=agentwire)
 which did the same thing but conflicted with AGENTWIRE Python on 18800.
 
+v1.4.2 AUDIT #5: SECURITY WARNING. This proxy is transparent and has NO
+own auth. Caller is responsible for:
+1. Binding to loopback (default --listen-host 127.0.0.1)
+2. Putting AGENTWIRE behind a firewall
+3. The TARGET AGENTWIRE handles auth (Bearer token via Authorization
+   header) forwarded as-is by this proxy.
+
 Usage:
   python3 agentwire_proxy.py --listen-port 18802 --target-port 18800
 """

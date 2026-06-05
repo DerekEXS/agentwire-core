@@ -75,19 +75,33 @@ class A2AGateway:
     def __init__(self, host="0.0.0.0", port=18800, auth_token="", agent_card=None):
         self.host, self.port, self.auth_token = host, port, auth_token
         self.agent_card = agent_card or DEFAULT_AGENT_CARD
-        self.app = web.Application()
+        # v1.4.2 AUDIT-FIX #7: CORS restricted to explicit origins (not wildcard).
+        # Empty allowlist = no CORS headers sent (browser will block cross-origin).
+        self.cors_origins: list[str] = []
+        self.app = web.Application(middlewares=[self._cors_middleware])
         self.runner = None
         self.site = None
         self._running = False
         self.tasks = {}
         self._setup_routes()
 
+    @web.middleware
+    async def _cors_middleware(self, req, handler):
+        """v1.4.2 AUDIT-FIX #7: explicit CORS allowlist. No wildcard.
+        Caller must configure self.cors_origins = ['https://app.example.com', ...]
+        """
+        if req.method == 'OPTIONS':
+            return web.Response(status=204)
+        resp = await handler(req)
+        origin = req.headers.get('Origin')
+        if origin and origin in self.cors_origins:
+            resp.headers['Access-Control-Allow-Origin'] = origin
+            resp.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+            resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            resp.headers['Access-Control-Max-Age'] = '3600'
+        return resp
+
     def _setup_routes(self):
-        self.app.router.add_get('/', self._handle_root)
-        self.app.router.add_get('/health', self._handle_health)
-        self.app.router.add_get('/.well-known/agent.json', self._handle_agent_card)
-        self.app.router.add_get('/.well-known/agent-card.json', self._handle_agent_card)
-        self.app.router.add_post('/a2a/jsonrpc', self._handle_jsonrpc)
         self.app.router.add_post('/a2a/rest/message/send', self._handle_rest_send)
         self.app.router.add_get('/a2a/metrics', self._handle_metrics)
 
@@ -116,8 +130,10 @@ class A2AGateway:
             elif method == 'agent/getCard': return self._result(req_id, self.agent_card)
             else: return self._error(req_id, -32601, f'Method not found: {method}')
         except Exception as e:
-            logger.error(f"JSON-RPC error: {e}")
-            return self._error(None, -32603, str(e))
+            # v1.4.2 AUDIT-FIX #8: don't leak internal error to caller.
+            # Log full error server-side, return generic message.
+            logger.exception("JSON-RPC internal error")
+            return self._error(None, -32603, 'Internal error')
 
     async def _handle_message_send(self, req_id, params):
         parts = params.get('message', {}).get('parts', [])
@@ -149,7 +165,38 @@ class A2AGateway:
         if not task: return self._error(req_id, -32602, f'Task not found: {tid}')
         return self._result(req_id, task)
 
+    @staticmethod
+    def _loopback_request(req) -> bool:
+        """v1.4.2 AUDIT-FIX #1: check if request originates from loopback.
+        Only loopback IPs (127.0.0.0/8, ::1) are considered safe for
+        no-auth access (e.g. local CUE host connecting to AGENTWIRE).
+        """
+        remote = req.remote or ''
+        # aiohttp gives "(ipv4, host, port)" or similar; extract host
+        host = remote.split(',')[1].strip() if ',' in remote else remote.split(':')[0].strip()
+        return host in ('127.0.0.1', '::1', 'localhost') or host.startswith('127.')
+
     async def _handle_rest_send(self, req):
+        # v1.4.2 AUDIT-FIX #1: REST endpoint now requires Bearer auth
+        # (previously JSON-RPC had auth but REST skipped it, allowing
+        # unauthenticated message/send to anyone reachable on the network)
+        if self.auth_token:
+            auth = req.headers.get('Authorization', '')
+            if not auth.startswith('Bearer ') or auth[7:] != self.auth_token:
+                return web.json_response(
+                    {'error': 'Unauthorized'}, status=401,
+                    headers={'WWW-Authenticate': 'Bearer'},
+                )
+        elif not self._loopback_request(req):
+            # Empty token + non-loopback request: reject (fail-safe)
+            logger.warning(
+                f"Rejecting REST message/send from non-loopback {req.remote}: "
+                "no auth_token configured. Set --token or --token-file to allow."
+            )
+            return web.json_response(
+                {'error': 'Unauthorized: auth required for non-loopback requests'},
+                status=401,
+            )
         try:
             data = await req.json()
             parts = data.get('message', {}).get('parts', [])
@@ -170,7 +217,10 @@ class A2AGateway:
 
             tid = str(uuid.uuid4())
             return web.json_response({'kind': 'task', 'id': tid, 'status': {'state': 'completed'}, 'message': {'messageId': str(uuid.uuid4()), 'role': 'agent', 'parts': [{'type': 'text', 'text': f'AgentWire: 收到 "{text[:50]}..."'}]}})
-        except Exception as e: return web.json_response({'error': str(e)}, status=500)
+        except Exception:
+            # v1.4.2 AUDIT-FIX #8: don't leak internal error to caller
+            logger.exception("REST message/send internal error")
+            return web.json_response({'error': 'Internal error'}, status=500)
 
     async def _handle_metrics(self, req): return web.json_response({'tasks_total': len(self.tasks), 'tasks_completed': sum(1 for t in self.tasks.values() if t.get('status', {}).get('state') == 'completed')})
 
@@ -284,12 +334,29 @@ async def main():
     global WORKFLOW_HOOK_CONFIG
 
     parser = argparse.ArgumentParser(description='AgentWire A2A v1.0.1 Service')
-    parser.add_argument('--host', default='0.0.0.0')
+    # v1.4.2 AUDIT-FIX #4: default host is 127.0.0.1 (loopback only) for safe
+    # local dev. Pass --host 0.0.0.0 explicitly only when behind a trusted
+    # reverse proxy or on a private network. With empty token + non-loopback
+    # host, the server will fail-fast at startup.
+    parser.add_argument('--host', default='127.0.0.1',
+                        help='bind host (default 127.0.0.1; use 0.0.0.0 only with auth)')
     parser.add_argument('--port', '-p', type=int, default=18800)
     parser.add_argument('--token', '-t', default='')
     parser.add_argument('--token-file', default='',
                         help='read token from file (UTF-8 BOM auto-stripped)')
+    parser.add_argument('--cors-origin', action='append', default=[],
+                        help='CORS allowlist (repeatable). No wildcards. '
+                             'Empty = no CORS headers (most secure).')
     args = parser.parse_args()
+    # v1.4.2 AUDIT-FIX #4: fail-fast on non-loopback + empty token
+    if args.host not in ('127.0.0.1', '::1', 'localhost') and not args.host.startswith('127.'):
+        if not (args.token or args.token_file or os.getenv('AGENTWIRE_TOKEN')):
+            logger.error(
+                f"FAIL-FAST: --host {args.host} (non-loopback) requires --token, "
+                "--token-file, or AGENTWIRE_TOKEN env var. Refusing to start with "
+                "empty auth (would expose to whole network)."
+            )
+            sys.exit(1)
     # Token resolution priority: --token > --token-file > AGENTWIRE_TOKEN env > empty
     auth_token = args.token
     if not auth_token and args.token_file:
@@ -302,6 +369,7 @@ async def main():
     if not auth_token:
         auth_token = os.getenv('AGENTWIRE_TOKEN', '')
     gateway = A2AGateway(host=args.host, port=args.port, auth_token=auth_token)
+    gateway.cors_origins = list(args.cors_origin)
 
     # 加载工作流钩子配置
     WORKFLOW_HOOK_CONFIG = load_workflow_hook_config()
