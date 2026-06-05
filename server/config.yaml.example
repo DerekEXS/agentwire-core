@@ -1,0 +1,31 @@
+# AgentWire 工作流钩子配置模板
+#
+# 复制此文件为 config.yaml 并根据实际环境修改
+# 注意：config.yaml 不会提交到 Git 仓库
+
+workflow_hook:
+  # 是否启用工作流钩子
+  enabled: true
+
+  # OpenClaw CLI 路径（根据实际安装位置修改）
+  openclaw_path: "/path/to/openclaw"
+
+  # 目标 Agent ID（根据 OpenClaw 配置修改）
+  agent_id: "main"
+
+  # 工作流路径（根据实际工作流存放位置修改）
+  workflow_path: "/path/to/your/workflow"
+
+  # 触发关键词（至少匹配2个才触发）
+  trigger_keywords:
+    - "project:"
+    - "scenes:"
+    - "video"
+    - "video script"
+    - "video production"
+
+  # 最少行数要求
+  trigger_min_lines: 5
+
+  # CLI 执行超时（秒）
+  timeout: 300

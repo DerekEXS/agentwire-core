@@ -1,0 +1,17 @@
+{
+  "id": "agentwire",
+  "name": "AgentWire",
+  "description": "AgentWire A2A v1.0.1 Gateway - OpenClaw TypeScript 插件",
+  "version": "1.0.0",
+  "activation": { "onStartup": true },
+  "extensions": { "httpServers": [{ "port": 18800, "description": "A2A HTTP/JSON-RPC 端点" }] },
+  "defaultConfig": {
+    "pythonHost": "127.0.0.1",
+    "pythonPort": 18801,
+    "port": 18800,
+    "protocolVersion": "1.0.1",
+    "agentCard": { "name": "AgentWire", "description": "A2A v1.0.1 Service", "version": "1.0.0", "capabilities": { "streaming": true, "pushNotifications": false, "extendedAgentCard": false }, "skills": [] }
+  },
+  "capabilities": ["agent-card-discovery", "json-rpc", "streaming", "task-management"],
+  "supportedProtocolVersions": ["1.0.1"]
+}

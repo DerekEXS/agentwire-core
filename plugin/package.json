@@ -1,0 +1,11 @@
+{
+  "name": "@agentwire/plugin",
+  "version": "1.0.0",
+  "description": "AgentWire OpenClaw TypeScript 插件",
+  "main": "dist/index.js",
+  "scripts": { "build": "tsc", "dev": "tsc --watch" },
+  "keywords": ["a2a", "agent2agent", "openclaw", "agentwire"],
+  "license": "MIT",
+  "devDependencies": { "@types/node": "^20.10.0", "typescript": "^5.3.0" },
+  "engines": { "node": ">=18.0.0" }
+}
