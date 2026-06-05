@@ -8,6 +8,10 @@ interface Config {
   pythonPort?: number;
   port?: number;
   authToken?: string;
+  // v1.4.2 AUDIT-FIX #3 (P3): explicit CORS allowlist. No wildcard.
+  // Empty = no CORS headers (most secure). Configure in openclaw.plugin.json
+  // via "corsOrigins" (string[]) — caller must enumerate origins.
+  corsOrigins?: string[];
 }
 
 const DEFAULT_AGENT_CARD = {
@@ -21,7 +25,7 @@ const DEFAULT_AGENT_CARD = {
   defaultOutputModes: ['text'],
 };
 
-let config: Config = { pythonHost: '127.0.0.1', pythonPort: 18800, port: 18800 };
+let config: Config = { pythonHost: '127.0.0.1', pythonPort: 18800, port: 18800, corsOrigins: [] };
 let server: any = null;
 
 function proxyPost(targetHost: string, targetPort: number, targetPath: string, body: string, headers: Record<string, string>) {
@@ -46,9 +50,15 @@ function proxyPost(targetHost: string, targetPort: number, targetPath: string, b
 
 async function handleRequest(req: any, res: any) {
   const url = new URL(req.url || '/', `http://localhost:${config.port}`);
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  // v1.4.2 AUDIT-FIX #3 (P3): CORS restricted to explicit allowlist.
+  // No wildcard. If config.corsOrigins is unset/empty, NO CORS headers sent
+  // (browser will block cross-origin). Caller must enumerate origins.
+  const origin = req.headers['origin'];
+  if (origin && config.corsOrigins && config.corsOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  }
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
   try {
     if (url.pathname === '/health' || url.pathname === '/a2a/health') {
