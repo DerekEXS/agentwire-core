@@ -1,11 +1,12 @@
-# AgentWire 工作流钩子配置模板
+# AgentWire 配置模板 (v1.4.3+)
 #
 # 复制此文件为 config.yaml 并根据实际环境修改
-# 注意：config.yaml 不会提交到 Git 仓库
+# 注意：config.yaml 不会提交到 Git 仓库（见 .gitignore）
 
+# ===== 工作流钩子 (v1.0 起) =====
 workflow_hook:
   # 是否启用工作流钩子
-  enabled: true
+  enabled: false
 
   # OpenClaw CLI 路径（根据实际安装位置修改）
   openclaw_path: "/path/to/openclaw"
@@ -29,3 +30,34 @@ workflow_hook:
 
   # CLI 执行超时（秒）
   timeout: 300
+
+# ===== 消息历史 (v1.4.3 新增) =====
+# 每个对话方(peer) 一份 JSONL 文件，自动按 context_id 分桶
+history:
+  # 总开关；false = 完全关闭 history 功能
+  enabled: true
+
+  # 每个 peer 最多保留多少轮 (round)
+  # 0 = 无限（默认；所有历史全保存，不删除）
+  # >0 = FIFO 上限，超过时自动删最旧的轮
+  max_rounds_per_peer: 0
+
+  # 每次 send 时自动注入最近 N 轮对话作为元数据
+  # 0 = 不注入
+  # 注入到 message.metadata.agentwire_history，接收方可选使用
+  context_rounds: 5
+
+  # 存储目录（每个 peer 一份 peer_<uuid>.jsonl + index.json）
+  storage_dir: "~/.local/share/agentwire/history"
+
+  # 写入前对文本部分做敏感数据脱敏
+  # 默认使用 server/redact.py 的内置 catalog（API key、token、密钥等）
+  # 也可通过 server start --redact-patterns <path.json> 覆盖
+  redact_sensitive: true
+
+  # 轮结束判定（用于 history_change trigger）
+  round_close:
+    # heuristic: outbound 后 N 秒内无 inbound 视作本轮结束
+    # explicit:  等待 send_a2a/close API 显式关闭
+    mode: heuristic
+    heuristic_idle_seconds: 300
