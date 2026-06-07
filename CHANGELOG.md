@@ -1,0 +1,95 @@
+# Changelog
+
+All notable changes to AgentWire-Core are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## v1.4.x series (2026-06 — FROZEN)
+
+The v1.4 series implements per-peer message history persistence, sensitive-data
+redaction, an agent-facing SKILL documentation library, and the protocol surface
+required for downstream plugin hosts to consume that history. v1.4 is the **stable
+baseline** going into v1.5; no further v1.4.x work is planned.
+
+---
+
+## [v1.4.4] - 2026-06-07
+
+### Added
+- `skill/PROTOCOL_QUICK_REF.md`: end-to-end `curl` walkthrough (6 steps from zero to working A2A session)
+- `STATUS_v1.4.4.md`: complete delivery checklist
+- `CHANGELOG.md` (this file)
+- `designs/v1.4.3/SPEC-PATCH.md`: retrospective SPEC for v1.4.3
+
+### Notes
+- v1.4.4 is a **micro-improvement** release — no new endpoints, no new triggers, no new expression namespaces
+- v1.4.4 acceptance: cue unit tests only (no end-to-end TG notification verification — that belongs to OpenClaw main agent's A2A→TG routing, out of v1.4.4 scope)
+
+## [v1.4.3] - 2026-06-06
+
+### Added
+- `server/history.py`: per-peer JSONL history persistence (auto-redacted, round-numbered, FIFO-capable)
+- `server/redact.py`: built-in sensitive pattern catalog (7 patterns: API keys, tokens, JWTs, private keys, URL-embedded passwords)
+- `server/start.py`: registered previously-orphaned routes (`/.well-known/agent.json`, `/health`, `/a2a/jsonrpc`, `/redact/patterns`)
+- JSON-RPC methods: `messages/list`, `messages/get`, `messages/peers`, `messages/export`
+- Context auto-injection into `message.metadata.agentwire_history` when `context_rounds > 0`
+- `skill/` directory with 9 documents (SKILL+CN, PROTOCOL_QUICK_REF, 5 INTEGRATION_*, PLUGIN_DEVELOPMENT)
+- Bilingual `README.md` / `README_CN.md`
+- `STATUS_v1.4.3.md`
+
+### Fixed
+- Routing bug from v1.4.2: `/.well-known/agent.json`, `/health`, `POST /a2a/jsonrpc` not registered (handlers existed, not wired)
+- `server/config.yaml` untracked in v1.4.2 audit #2; now consistent
+
+## [v1.4.2] - 2026-06-05
+
+### Added
+- BOM auto-strip on token file reads (`encoding='utf-8-sig'`)
+- systemd user unit files: `agentwire.service` + `agentwire-proxy.service`
+- `server/proxy.py`: loopback reverse proxy (18802 → 18800)
+- CUE: `--a2a-token-env` / `--a2a-token-file` flags (4-source token resolution)
+
+### Security
+- v1.4.2 AUDIT (3 commits): 10 issues fixed + 2 follow-ups (CORS allowlist, internal error non-leakage)
+
+## [v1.4.1] - 2026-06-04
+
+### Added
+- Plugin host skeleton (Python aiohttp)
+- Admin API: 3 endpoints on port 19000 (`/status`, `/plugins`, `/trigger`)
+- 5 example cue plugins (echo, echo-with-persist, cron-driven, a2a-with-fallback, file-watcher)
+- 6 BUG fixes found during v1.4 P0 implementation
+- 9 regression tests
+- Total: 235/235 tests green
+
+## [v1.3.1.1] - 2026-05-15
+
+### Fixed
+- Sandbox tightening
+- Trigger await pattern
+- Peer card cache (10min TTL)
+
+## [v1.3.1] - 2026-05-10
+
+### Security
+- P0-1: persist.path sandbox (4-layer defense + dotdot/symlink escape)
+- P0-2: target validation (loader + statechart runtime)
+
+## [v1.3] - 2026-05-01
+
+### Added
+- Initial public release: 154 tests, 1522 lines of core code
+- A2A v0.3.0 protocol implementation (TypeScript plugin + Python service)
+- End-to-end smoke verification
+
+---
+
+## v1.5 backlog (NOT in v1.4 series)
+
+Items deferred from v1.4 → v1.5:
+- Dockerfile + docker-compose (deployment)
+- structlog observability (P1)
+- Cross-cue plugin dependencies (P1)
+- `/messages/import` endpoint (history restore scenario)
+- `history.peers.*` cross-peer expression namespace (was deferred from v1.4.4 candidate D)
