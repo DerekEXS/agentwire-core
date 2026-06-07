@@ -14,6 +14,21 @@ baseline** going into v1.5; no further v1.4.x work is planned.
 
 ---
 
+## [v1.4.5] - 2026-06-07
+
+### Changed
+- `STATUS_v1.4.4.md`: 真 SHA 校准 (tag `v1.4.4` commit `e58d6e7`) + prior v1.4.3 SHA `cf6d5ed` 引用; 修订 A2A 测试措辞 (明确"协议层基线验证基于 v1.4.2 echo 模板, 非 v1.4.4 端到端验收")
+
+### Added
+- `designs/v1.4.4/SPEC-PATCH.md` (新 ≤30 行): symmetric counterpart to cue 仓 v1.4.4 SPEC-PATCH (v1.4.4 core 侧只做文档增补, 不引入新代码或新设计)
+
+### Notes
+- v1.4.5 is a **cleanup / spec-debt closure** release — 初梦 P1/P2 行动清单 (commit 拆分 / SHA 校准 / scope 声明 / 设计对称补)
+- v1.4.5 acceptance: 243 cue 单测 (从 v1.4.4 继承) 全过 + 4 阶段 leak prevention 扫描 v1.4.5 scope 0 命中
+- v1.4.5 commit history (按初梦 P1 建议拆分):
+  - core 仓 1 commit (`7f2c931`): SHA 校准 + v1.4.4 SPEC-PATCH 对称补
+  - cue 仓 2 commits (`75a830d` + `8ce3e03`): STATUS 校准 + scope 声明
+
 ## [v1.4.4] - 2026-06-07
 
 ### Added
