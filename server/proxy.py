@@ -42,8 +42,11 @@ async def health_handler(request: web.Request) -> web.Response:
                 if resp.status == 200:
                     return web.json_response({"status": "healthy", "upstream": target}, status=200)
                 return web.json_response({"status": "degraded", "upstream_status": resp.status}, status=503)
-    except Exception as e:
-        return web.json_response({"status": "downstream_unreachable", "error": str(e)}, status=503)
+    except Exception:
+        # v1.4.6: log internally but don't leak str(e) to caller — may contain
+        # "Connection refused to 127.0.0.1:18800" etc. that would expose network topology.
+        log.warning("upstream unreachable", exc_info=True)
+        return web.json_response({"status": "downstream_unreachable"}, status=503)
 
 
 async def proxy_handler(request: web.Request) -> web.StreamResponse:

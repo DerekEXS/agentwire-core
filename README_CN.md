@@ -233,6 +233,26 @@ agentwire-core/
 - 任何历史持久化前**自动脱敏** API key、token、JWT、私钥、URL 内嵌密码
 - **内部错误不外泄**——服务端日志完整,客户端只收通用 500
 
+## 部署说明
+
+> ⚠️ **v1.4.6 部署提示**: AgentWire CORE 使用明文 HTTP(非 HTTPS)。`Authorization: Bearer <token>` header 因此在网络上**明文传输**。
+
+**适用于**:
+- 仅 loopback 部署(单机 agent on `127.0.0.1:18800`)
+- 私有 LAN / Tailscale / WireGuard 等网络本身可信的场景
+
+**不适用于**:
+- 直接暴露公网(如 VPS 上 `0.0.0.0:18800`)
+
+**如必须暴露 AgentWire 到不可信网络**:
+
+1. **必须**: 在前端部署 TLS 终止反向代理(nginx / Caddy / Traefik / Cloudflare Tunnel)
+2. **建议**: AgentWire 只绑 loopback(`--host 127.0.0.1`);反向代理对外暴露公网端口
+3. **强烈建议**: 定期轮换 bearer token,使用 32+ 字符随机值
+4. **可考虑**: 双向 mTLS(若你控制两端;AgentWire 暂不直接支持 mTLS——这是 v1.5+ 候选)
+
+未来 release(v1.5+)可能直接内置 `aiohttp` TLS 模式,但当前部署边界由用户的反向代理负责。
+
 ## 协议
 
 - **A2A v1.0.1** —— <https://a2a-protocol.org/latest/specification/>

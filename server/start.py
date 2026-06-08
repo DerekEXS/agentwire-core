@@ -175,11 +175,19 @@ class A2AGateway:
         return web.json_response(REDACT_CATALOG)
 
     def _check_auth(self, req) -> bool:
-        """Returns True if request is authorized (or no auth required)."""
+        """Returns True if request is authorized (or no auth required).
+
+        v1.4.6: use hmac.compare_digest for constant-time comparison. Mitigates
+        (very low-risk) timing-side-channel token recovery; replace naive
+        `==` on the Authorization header value.
+        """
         if not self.auth_token:
             return self._loopback_request(req)
         auth = req.headers.get('Authorization', '')
-        return auth.startswith('Bearer ') and auth[7:] == self.auth_token
+        if not auth.startswith('Bearer '):
+            return False
+        expected = f"Bearer {self.auth_token}"
+        return hmac.compare_digest(auth, expected)
 
     async def _handle_jsonrpc(self, req):
         try:

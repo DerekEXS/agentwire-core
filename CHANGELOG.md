@@ -14,6 +14,24 @@ baseline** going into v1.5; no further v1.4.x work is planned.
 
 ---
 
+## [v1.4.6] - 2026-06-07
+
+### Security
+- `server/start.py::_check_auth`: use `hmac.compare_digest` for constant-time Bearer token comparison (L1 from initial security audit; mitigates very low-risk timing-side-channel token recovery)
+- `server/proxy.py::health_handler`: don't leak `str(e)` in 503 response — log internally, return fixed `{"status": "downstream_unreachable"}` only (L2 from audit; prevents network-topology disclosure like "Connection refused to 127.0.0.1:18800")
+
+### Documentation
+- `README.md` + `README_CN.md`: new **Deployment** section explicitly states HTTP-not-HTTPS limitation, lists loopback/LAN/VPN as suitable, public-internet as NOT suitable without TLS-terminating reverse proxy (D1 from audit)
+
+### Audit clarification
+- M1 from initial audit (context-injection redact coverage) is a **false positive** — `HistoryManager.get_context_for_peer` returns messages that were already redacted at `record_outbound` write time; no double-application needed
+- L3 (OpenAI key regex over-broad, `sk-[a-zA-Z0-9]{40,}`) acknowledged as low risk; not fixed in v1.4.6
+
+### Notes
+- v1.4.6 is a **security audit closure** release — fixes 3 low-severity findings (L1, L2, D1) from initial audit, 1 medium finding (M1) confirmed as false positive
+- No new features, no breaking changes, no schema changes
+- All 243 cue tests still pass (cue unchanged in v1.4.6)
+
 ## [v1.4.5] - 2026-06-07
 
 ### Changed

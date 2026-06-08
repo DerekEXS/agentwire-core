@@ -233,6 +233,26 @@ If you are authoring a YAML statechart plugin for an AgentWire-compatible host, 
 - **Redaction** of API keys, tokens, JWTs, private keys, and URL-embedded passwords before any history persistence.
 - **Internal errors** are not leaked to clients (logged server-side, generic 500 returned).
 
+## Deployment
+
+> ⚠️ **v1.4.6 deployment note**: AgentWire CORE uses plain HTTP (not HTTPS). The `Authorization: Bearer <token>` header is therefore transmitted **in cleartext** on the wire.
+
+**Suitable for**:
+- Loopback-only deployments (single-host agent on `127.0.0.1:18800`)
+- Private LAN / Tailscale / WireGuard segments where the network itself is trusted
+
+**NOT suitable for**:
+- Direct public-internet exposure (e.g. `0.0.0.0:18800` on a VPS)
+
+**If you must expose AgentWire to an untrusted network**:
+
+1. **Required**: put a TLS-terminating reverse proxy in front (nginx / Caddy / Traefik / Cloudflare Tunnel)
+2. **Recommended**: bind AgentWire to loopback only (`--host 127.0.0.1`); the proxy exposes the public port
+3. **Strongly recommended**: rotate the bearer token regularly and use a 32+ char random value
+4. **Consider**: mTLS between agents if you control both ends (AgentWire does not implement mTLS — that would be a future enhancement)
+
+A future release (v1.5+) may ship a `aiohttp` TLS mode directly, but for now the deployment boundary is the operator's reverse proxy.
+
 ## Protocol
 
 - **A2A v1.0.1** — <https://a2a-protocol.org/latest/specification/>
