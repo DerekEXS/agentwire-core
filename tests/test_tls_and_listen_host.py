@@ -27,6 +27,24 @@ def test_arg_parser_cli_host_overrides_env(monkeypatch):
     assert args.host == "127.0.0.1"
 
 
+def test_arg_parser_uses_core_listen_port_env(monkeypatch):
+    monkeypatch.setenv("CORE_LISTEN_PORT", "18888")
+    parser = start.build_arg_parser()
+
+    args = parser.parse_args([])
+
+    assert args.port == 18888
+
+
+def test_arg_parser_uses_agentwire_token_file_env(monkeypatch):
+    monkeypatch.setenv("AGENTWIRE_TOKEN_FILE", "/run/secrets/a2a-token.txt")
+    parser = start.build_arg_parser()
+
+    args = parser.parse_args([])
+
+    assert args.token_file == "/run/secrets/a2a-token.txt"
+
+
 def test_tls_args_must_be_supplied_together():
     with pytest.raises(SystemExit):
         start.build_ssl_context("cert.pem", "")
