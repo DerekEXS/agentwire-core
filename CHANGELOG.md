@@ -14,6 +14,17 @@ baseline** going into v1.5; no further v1.4.x work is planned.
 
 ---
 
+## [v1.4.9] - 2026-06-12
+
+### Added
+- `CORE_LISTEN_HOST` environment variable for safe listen-host configuration. CLI `--host` remains highest priority.
+- Built-in TLS support via `--tls-cert` + `--tls-key`; both must be supplied together.
+- Startup warning when CORE explicitly binds `0.0.0.0`.
+
+### Tests
+- Added regression coverage for listen-host environment precedence and TLS argument validation/context creation.
+- Manual TLS smoke test: self-signed cert + `curl -k https://127.0.0.1:<port>/.well-known/agent.json` returned 200.
+
 ## [v1.4.8] - 2026-06-12
 
 ### Added

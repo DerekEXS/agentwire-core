@@ -18,6 +18,8 @@ import hmac
 import logging
 import os
 import signal
+import ssl
+import sys
 import uuid
 from pathlib import Path
 
@@ -462,14 +464,15 @@ class A2AGateway:
             status=400 if code in (-32700, -32600, -32602) else 500,
         )
 
-    async def start(self):
+    async def start(self, ssl_context=None):
         self.runner = web.AppRunner(self.app)
         await self.runner.setup()
-        self.site = web.TCPSite(self.runner, self.host, self.port)
+        self.site = web.TCPSite(self.runner, self.host, self.port, ssl_context=ssl_context)
         await self.site.start()
         self._running = True
-        logger.info(f"AgentWire 启动: http://{self.host}:{self.port}")
-        logger.info(f"Agent Card: http://{self.host}:{self.port}/.well-known/agent.json")
+        scheme = 'https' if ssl_context is not None else 'http'
+        logger.info(f"AgentWire 启动: {scheme}://{self.host}:{self.port}")
+        logger.info(f"Agent Card: {scheme}://{self.host}:{self.port}/.well-known/agent.json")
 
     async def stop(self):
         if self.runner:
@@ -535,12 +538,10 @@ async def _run_openclaw_agent_async(message: str, keyword_count: int = 0, line_c
         logger.error(f"[工作流钩子] 执行异常: {e}")
 
 
-async def main():
-    global WORKFLOW_HOOK_CONFIG, HISTORY, HISTORY_CONFIG, REDACT_CATALOG
-
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='AgentWire A2A v1.0.1 Service')
-    parser.add_argument('--host', default='127.0.0.1',
-                        help='bind host (default 127.0.0.1; use 0.0.0.0 only with auth)')
+    parser.add_argument('--host', default=os.getenv('CORE_LISTEN_HOST', '127.0.0.1'),
+                        help='bind host (default 127.0.0.1; env CORE_LISTEN_HOST; use 0.0.0.0 only with auth)')
     parser.add_argument('--port', '-p', type=int, default=18800)
     parser.add_argument('--token', '-t', default='')
     parser.add_argument('--token-file', default='',
@@ -550,6 +551,26 @@ async def main():
     parser.add_argument('--redact-patterns', default='',
                         help='path to JSON file with redaction patterns '
                              '(default: built-in catalog)')
+    parser.add_argument('--tls-cert', default='', help='TLS certificate PEM path')
+    parser.add_argument('--tls-key', default='', help='TLS private key PEM path')
+    return parser
+
+
+def build_ssl_context(tls_cert: str, tls_key: str):
+    if bool(tls_cert) != bool(tls_key):
+        logger.error('--tls-cert and --tls-key must be provided together')
+        sys.exit(1)
+    if not tls_cert and not tls_key:
+        return None
+    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    context.load_cert_chain(certfile=tls_cert, keyfile=tls_key)
+    return context
+
+
+async def main():
+    global WORKFLOW_HOOK_CONFIG, HISTORY, HISTORY_CONFIG, REDACT_CATALOG
+
+    parser = build_arg_parser()
     args = parser.parse_args()
 
     if args.host not in ('127.0.0.1', '::1', 'localhost') and not args.host.startswith('127.'):
@@ -596,10 +617,14 @@ async def main():
 
     WORKFLOW_HOOK_CONFIG = load_workflow_hook_config()
 
+    if args.host == '0.0.0.0':
+        logger.warning("CORE 监听所有网络接口，请确保防火墙已配置")
+
+    ssl_context = build_ssl_context(args.tls_cert, args.tls_key)
     gateway = A2AGateway(host=args.host, port=args.port, auth_token=auth_token)
     gateway.cors_origins = list(args.cors_origin)
 
-    await gateway.start()
+    await gateway.start(ssl_context=ssl_context)
     loop = asyncio.get_event_loop()
     stop_event = asyncio.Event()
 
