@@ -14,6 +14,7 @@ v1.4.3 changes vs v1.4.2:
 """
 import argparse
 import asyncio
+import hmac
 import logging
 import os
 import signal
@@ -267,6 +268,7 @@ class A2AGateway:
     async def _handle_message_send(self, req_id, params):
         msg = params.get('message', {}) or {}
         parts_in = msg.get('parts', [])
+        metadata = msg.get('metadata')
         context_id = params.get('contextId') or params.get('taskId')
         msg_id = msg.get('messageId') or str(uuid.uuid4())
         text = ' '.join(p.get('text', '') for p in parts_in if p.get('type') == 'text')
@@ -286,7 +288,7 @@ class A2AGateway:
         # v1.4.3: history record
         peer_uuid, round_n = None, None
         if HISTORY is not None and HISTORY_CONFIG.get('enabled', True):
-            peer_uuid, round_n = HISTORY.record_outbound(context_id, msg_id, parts_in)
+            peer_uuid, round_n = HISTORY.record_outbound(context_id, msg_id, parts_in, metadata=metadata)
 
         # Build response
         tid = str(uuid.uuid4())
@@ -347,6 +349,7 @@ class A2AGateway:
             data = await req.json()
             msg = data.get('message', {}) or {}
             parts_in = msg.get('parts', [])
+            metadata = msg.get('metadata')
             context_id = data.get('contextId') or data.get('taskId')
             msg_id = msg.get('messageId') or str(uuid.uuid4())
             text = ' '.join(p.get('text', '') for p in parts_in if p.get('type') == 'text')
@@ -363,7 +366,7 @@ class A2AGateway:
             # v1.4.3: history record
             peer_uuid, round_n = None, None
             if HISTORY is not None and HISTORY_CONFIG.get('enabled', True):
-                peer_uuid, round_n = HISTORY.record_outbound(context_id, msg_id, parts_in)
+                peer_uuid, round_n = HISTORY.record_outbound(context_id, msg_id, parts_in, metadata=metadata)
 
             tid = str(uuid.uuid4())
             reply_text = f'AgentWire: 收到 "{text[:50]}..."'

@@ -72,6 +72,13 @@ class HistoryManager:
                 out.append(p)
         return out
 
+    def _redact_metadata(self, metadata):
+        if metadata is None:
+            return None
+        if not self._patterns:
+            return metadata
+        return json.loads(self._redact(json.dumps(metadata, ensure_ascii=False)))
+
     def set_patterns(self, patterns: list[dict]) -> None:
         """Hot-swap redaction patterns (e.g. after fetching /redact/patterns)."""
         with self.lock:
@@ -138,6 +145,7 @@ class HistoryManager:
         context_id: str | None,
         msg_id: str,
         parts: list[dict],
+        metadata: dict | None = None,
     ) -> tuple[str, int]:
         """Record an outbound message; returns (peer_uuid, round)."""
         peer_uuid = _peer_uuid_from_context(context_id, msg_id)
@@ -158,6 +166,7 @@ class HistoryManager:
                 "peer_uuid": peer_uuid,
                 "peer_name": peer["name"],
                 "parts": self._redact_parts(parts),
+                "metadata": self._redact_metadata(metadata),
             }
             self._append_line(peer_uuid, line)
             self._enforce_cap(peer)
@@ -169,6 +178,7 @@ class HistoryManager:
         peer_uuid: str,
         msg_id: str,
         parts: list[dict],
+        metadata: dict | None = None,
     ) -> int:
         """Record an inbound message; attaches to the current (or last) round."""
         ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -184,6 +194,7 @@ class HistoryManager:
                 "peer_uuid": peer_uuid,
                 "peer_name": peer["name"],
                 "parts": self._redact_parts(parts),
+                "metadata": self._redact_metadata(metadata),
             }
             self._append_line(peer_uuid, line)
             self._save_index()
