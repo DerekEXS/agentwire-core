@@ -37,7 +37,7 @@ DEFAULT_AGENT_CARD = {
     "protocolVersion": "1.0.1",
     "name": "AgentWire",
     "description": "AgentWire A2A v1.0.1 Service",
-    "version": "1.4.3",
+    "version": "1.5.0",
     "capabilities": {"streaming": True, "pushNotifications": False, "extendedAgentCard": False},
     "skills": [],
     "defaultInputModes": ["text"],
@@ -542,10 +542,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='AgentWire A2A v1.0.1 Service')
     parser.add_argument('--host', default=os.getenv('CORE_LISTEN_HOST', '127.0.0.1'),
                         help='bind host (default 127.0.0.1; env CORE_LISTEN_HOST; use 0.0.0.0 only with auth)')
-    parser.add_argument('--port', '-p', type=int, default=18800)
+    parser.add_argument('--port', '-p', type=int, default=int(os.getenv('CORE_LISTEN_PORT', '18800')))
     parser.add_argument('--token', '-t', default='')
-    parser.add_argument('--token-file', default='',
-                        help='read token from file (UTF-8 BOM auto-stripped)')
+    parser.add_argument('--token-file', default=os.getenv('AGENTWIRE_TOKEN_FILE', ''),
+                        help='read token from file (UTF-8 BOM auto-stripped; env AGENTWIRE_TOKEN_FILE)')
     parser.add_argument('--cors-origin', action='append', default=[],
                         help='CORS allowlist (repeatable). No wildcards.')
     parser.add_argument('--redact-patterns', default='',

@@ -1,0 +1,17 @@
+# Baked-in defaults for the Docker image. The compose volume mounts
+# /data, so persistence lives under /data/history regardless of host.
+# Host operators can override by mounting a different config.yaml on
+# top of /app/server/config.yaml.
+
+history:
+  enabled: true
+  max_rounds_per_peer: 0
+  context_rounds: 5
+  storage_dir: /data/history
+  redact_sensitive: true
+  round_close:
+    mode: heuristic
+    heuristic_idle_seconds: 300
+
+workflow_hook:
+  enabled: false

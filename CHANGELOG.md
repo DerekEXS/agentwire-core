@@ -5,6 +5,18 @@ All notable changes to AgentWire-Core are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.5.0] - 2026-06-12
+
+### Added
+- Dockerfile for containerized CORE deployment on `python:3.13-slim`, running as non-root `agentwire` and exposing port 18800.
+- Standalone `docker-compose.yml` for CORE with token secret, healthcheck, and persistent `/data/history` + `/data/peers` mounts.
+- Container config defaults history storage to `/data/history`.
+- `CORE_LISTEN_PORT` and `AGENTWIRE_TOKEN_FILE` environment defaults for Docker-friendly startup.
+
+### Tests
+- Added parser regression coverage for `CORE_LISTEN_PORT` and `AGENTWIRE_TOKEN_FILE`.
+- Full CORE suite: 19 passed.
+
 ## v1.4.x series (2026-06 — FROZEN)
 
 The v1.4 series implements per-peer message history persistence, sensitive-data
