@@ -19,6 +19,7 @@ import logging
 import os
 import signal
 import uuid
+from pathlib import Path
 
 import yaml
 from aiohttp import web
@@ -84,6 +85,39 @@ def load_workflow_hook_config():
     except Exception as e:
         logger.error(f"[工作流钩子] 配置加载失败: {e}，使用默认配置")
         return default_config
+
+
+def check_token_file_hygiene(token_file: str) -> dict:
+    """Best-effort token-file diagnostics. Never blocks startup."""
+    path = Path(token_file).expanduser()
+    issues: list[str] = []
+    try:
+        data = path.read_bytes()
+        if data.startswith(b'\xef\xbb\xbf'):
+            issues.append('utf8_bom')
+            logger.warning(
+                "token file %s starts with UTF-8 BOM; fix with: python3 -c \"from pathlib import Path; p=Path('%s'); b=p.read_bytes(); p.write_bytes(b[3:] if b.startswith(b'\\xef\\xbb\\xbf') else b)\"",
+                path, path,
+            )
+        if data.endswith(b'\r\n') or b'\r\n' in data:
+            issues.append('crlf_line_ending')
+            logger.warning(
+                "token file %s uses CRLF line endings; fix with: perl -pi -e 's/\\r$//' %s",
+                path, path,
+            )
+        mode = path.stat().st_mode & 0o777
+        if mode & 0o077:
+            issues.append('loose_permissions')
+            logger.warning(
+                "token file %s permissions %o are too broad; fix with: chmod 600 %s",
+                path, mode, path,
+            )
+    except OSError as e:
+        issues.append('unreadable')
+        logger.warning("token file %s health check failed: %s", path, e)
+    if not issues:
+        logger.info("token file health check passed: %s", path)
+    return {"ok": not issues, "issues": issues}
 
 
 def load_history_config() -> dict:
@@ -224,6 +258,8 @@ class A2AGateway:
                 return self._handle_messages_peers(req_id, params)
             elif method == 'messages/export':
                 return self._handle_messages_export(req_id, params)
+            elif method == 'messages/import':
+                return self._handle_messages_import(req_id, params)
             else:
                 return self._error(req_id, -32601, f'Method not found: {method}')
         except Exception:
@@ -264,6 +300,17 @@ class A2AGateway:
         except ValueError as e:
             return self._error(req_id, -32602, str(e))
         return self._result(req_id, {"format": fmt, "content": content})
+
+    def _handle_messages_import(self, req_id, params):
+        if HISTORY is None:
+            return self._error(req_id, -32603, 'history disabled')
+        peer_uuid = params.get('peer_uuid')
+        messages = params.get('messages')
+        if not peer_uuid:
+            return self._error(req_id, -32602, 'peer_uuid required')
+        if not isinstance(messages, list):
+            return self._error(req_id, -32602, 'messages array required')
+        return self._result(req_id, HISTORY.import_messages(peer_uuid, messages))
 
     async def _handle_message_send(self, req_id, params):
         msg = params.get('message', {}) or {}
@@ -515,6 +562,7 @@ async def main():
 
     auth_token = args.token
     if not auth_token and args.token_file:
+        check_token_file_hygiene(args.token_file)
         try:
             with open(args.token_file, 'r', encoding='utf-8-sig') as f:
                 auth_token = f.read().strip()
