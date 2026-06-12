@@ -14,6 +14,16 @@ baseline** going into v1.5; no further v1.4.x work is planned.
 
 ---
 
+## [v1.4.7] - 2026-06-12
+
+### Added
+- `server/history.py`: history JSONL now persists message-level `metadata` for outbound and inbound messages, defaulting to `null` when absent.
+- `message/send` and REST `/a2a/rest/message/send`: pass `message.metadata` through to history storage.
+- Metadata values now pass through the existing redaction pipeline before being written.
+
+### Tests
+- Added regression coverage for metadata persistence, metadata redaction, `messages/list`/`messages/get`, JSONL export, and JSON-RPC/REST send paths.
+
 ## [v1.4.6] - 2026-06-07
 
 ### Security
