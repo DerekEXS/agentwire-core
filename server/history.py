@@ -200,6 +200,43 @@ class HistoryManager:
             self._save_index()
             return round_n
 
+    def import_messages(self, peer_uuid: str, messages: list[dict]) -> dict:
+        """Import externally supplied messages into a peer history.
+
+        Each imported message becomes a new round. The caller provides only
+        message-level fields; round/msg_id/ts/peer bookkeeping is assigned here.
+        """
+        ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        with self.lock:
+            peer = self.get_or_create_peer(peer_uuid)
+            first_round = peer["last_round"] + 1 if messages else peer["last_round"]
+            last_round = peer["last_round"]
+            for msg in messages:
+                last_round += 1
+                peer["last_round"] = last_round
+                peer["total_rounds"] += 1
+                peer["last_ts"] = ts
+                line = {
+                    "round": last_round,
+                    "ts": ts,
+                    "role": msg.get("role", "user"),
+                    "msg_id": msg.get("messageId") or msg.get("msg_id") or f"import-{last_round}-{int(time.time() * 1000)}",
+                    "context_id": msg.get("context_id"),
+                    "peer_uuid": peer_uuid,
+                    "peer_name": peer["name"],
+                    "parts": self._redact_parts(msg.get("parts", [])),
+                    "metadata": self._redact_metadata(msg.get("metadata")),
+                }
+                self._append_line(peer_uuid, line)
+                self._enforce_cap(peer)
+            self._save_index()
+            return {
+                "imported": len(messages),
+                "peer_uuid": peer_uuid,
+                "first_round": first_round,
+                "last_round": last_round,
+            }
+
     def list_messages(
         self,
         peer_uuid: str | None = None,

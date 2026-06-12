@@ -14,6 +14,16 @@ baseline** going into v1.5; no further v1.4.x work is planned.
 
 ---
 
+## [v1.4.8] - 2026-06-12
+
+### Added
+- JSON-RPC `messages/import`: append imported messages to a peer history with server-assigned round numbers, timestamps, and message ids.
+- Imported messages support `metadata` and reuse the existing redaction pipeline for parts and metadata.
+- Startup token-file health diagnostics warn on UTF-8 BOM, CRLF line endings, and overly broad file permissions without blocking startup.
+
+### Tests
+- Added regression coverage for history import sequencing, metadata persistence/redaction, JSON-RPC import validation, and token-file hygiene logging.
+
 ## [v1.4.7] - 2026-06-12
 
 ### Added
