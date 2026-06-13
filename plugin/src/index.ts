@@ -1,12 +1,18 @@
 /**
  * AgentWire OpenClaw Plugin
  * 内部代理请求到 Python A2A 服务
+ *
+ * v1.5.1 security hardening:
+ * - bindHost defaults to 127.0.0.1; use 0.0.0.0 only behind firewall/VPN.
+ * - Inbound requests require Bearer auth when `authToken` is set; LAN-exposure
+ *   without an authToken is rejected (401) to prevent unauthenticated proxy.
  */
 
 interface Config {
   pythonHost?: string;
   pythonPort?: number;
   port?: number;
+  bindHost?: string;
   authToken?: string;
   // v1.4.2 AUDIT-FIX #3 (P3): explicit CORS allowlist. No wildcard.
   // Empty = no CORS headers (most secure). Configure in openclaw.plugin.json
@@ -25,7 +31,13 @@ const DEFAULT_AGENT_CARD = {
   defaultOutputModes: ['text'],
 };
 
-let config: Config = { pythonHost: '127.0.0.1', pythonPort: 18800, port: 18800, corsOrigins: [] };
+let config: Config = {
+  pythonHost: '127.0.0.1',
+  pythonPort: 18800,
+  port: 18800,
+  bindHost: '127.0.0.1',
+  corsOrigins: [],
+};
 let server: any = null;
 
 function proxyPost(targetHost: string, targetPort: number, targetPath: string, body: string, headers: Record<string, string>) {
@@ -48,6 +60,25 @@ function proxyPost(targetHost: string, targetPort: number, targetPath: string, b
   });
 }
 
+function isAuthorized(req: any): boolean {
+  if (!config.authToken) {
+    return false;
+  }
+  const header = req.headers['authorization'] || '';
+  if (!header.startsWith('Bearer ')) {
+    return false;
+  }
+  const token = header.slice('Bearer '.length);
+  if (token.length !== config.authToken.length) {
+    return false;
+  }
+  let mismatch = 0;
+  for (let i = 0; i < token.length; i++) {
+    mismatch |= token.charCodeAt(i) ^ config.authToken.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
+
 async function handleRequest(req: any, res: any) {
   const url = new URL(req.url || '/', `http://localhost:${config.port}`);
   // v1.4.2 AUDIT-FIX #3 (P3): CORS restricted to explicit allowlist.
@@ -68,6 +99,11 @@ async function handleRequest(req: any, res: any) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ...DEFAULT_AGENT_CARD, ...config.agentCard }));
     } else if (url.pathname === '/a2a/jsonrpc') {
+      if (!isAuthorized(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'unauthorized' }));
+        return;
+      }
       let body = '';
       for await (const chunk of req) body += chunk;
       const headers: Record<string, string> = {};
@@ -91,6 +127,12 @@ async function handleRequest(req: any, res: any) {
 
 export function activate(cfg?: Config) {
   config = { ...config, ...cfg };
+  if (config.bindHost === '0.0.0.0') {
+    console.warn('[AgentWire Plugin] binding 0.0.0.0; require authToken + firewall before exposing');
+  }
+  if (!config.authToken) {
+    console.warn('[AgentWire Plugin] no authToken configured; inbound /a2a/jsonrpc will return 401');
+  }
   console.log('[AgentWire Plugin] 启动中...');
   const http = require('http');
   server = http.createServer(handleRequest);
@@ -108,8 +150,8 @@ export function activate(cfg?: Config) {
       console.error(`[AgentWire Plugin] 启动错误: ${err && err.message ? err.message : err}`);
     }
   });
-  server.listen(config.port!, () => {
-    console.log(`[AgentWire Plugin] 已启动: http://localhost:${config.port}`);
+  server.listen(config.port!, config.bindHost!, () => {
+    console.log(`[AgentWire Plugin] 已启动: http://${config.bindHost}:${config.port}`);
   });
 }
 

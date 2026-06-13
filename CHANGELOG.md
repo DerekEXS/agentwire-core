@@ -5,6 +5,21 @@ All notable changes to AgentWire-Core are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.5.1] - 2026-06-13
+
+### Security
+- Incoming message text is no longer logged or echoed in the reply body; logs now carry `len=` and `sha256[:16]` summary plus peer id.
+- `messages/import` now enforces per-request message count (default 100, hard cap 500) and per-part text size (default 64KB, hard cap 256KB), returning JSON-RPC -32602 on overflow.
+- `messages/export` now supports `limit` (1..200) and `offset` pagination, returns `total_count` and `has_more`, and rejects out-of-range limits.
+- TypeScript OpenClaw plugin binds to `127.0.0.1` by default and requires Bearer auth on inbound `/a2a/jsonrpc` when `authToken` is configured.
+
+### Changed
+- Agent Card version bump to `v1.5.1`.
+
+### Tests
+- Added v1.5.1 coverage for log redaction, import/export size limits, pagination, and plugin inbound auth/bind.
+- Full CORE suite: 25 passed.
+
 ## [v1.5.0] - 2026-06-12
 
 ### Added

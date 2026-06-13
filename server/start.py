@@ -14,6 +14,7 @@ v1.4.3 changes vs v1.4.2:
 """
 import argparse
 import asyncio
+import hashlib
 import hmac
 import logging
 import os
@@ -37,7 +38,7 @@ DEFAULT_AGENT_CARD = {
     "protocolVersion": "1.0.1",
     "name": "AgentWire",
     "description": "AgentWire A2A v1.0.1 Service",
-    "version": "1.5.0",
+    "version": "1.5.1",
     "capabilities": {"streaming": True, "pushNotifications": False, "extendedAgentCard": False},
     "skills": [],
     "defaultInputModes": ["text"],
@@ -157,6 +158,19 @@ WORKFLOW_HOOK_CONFIG = None
 HISTORY: HistoryManager | None = None
 HISTORY_CONFIG: dict = {}
 REDACT_CATALOG: dict = {}
+
+# v1.5.1: history import/export size limits (defense in depth against
+# disk-bloat, large-response, and authenticated-but-noisy callers).
+IMPORT_MAX_MESSAGES = min(int(os.getenv('IMPORT_MAX_MESSAGES', '100')), 500)
+IMPORT_MAX_MESSAGE_SIZE = min(int(os.getenv('IMPORT_MAX_MESSAGE_SIZE', '65536')), 262144)
+EXPORT_DEFAULT_LIMIT = min(int(os.getenv('EXPORT_MAX_LIMIT', '50')), 200)
+EXPORT_HARD_MAX_LIMIT = 200
+
+
+def _message_log_summary(text: str, peer: str | None = None) -> str:
+    digest = hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]
+    peer_part = f" peer={peer}" if peer else ""
+    return f"len={len(text)} hash={digest}{peer_part}"
 
 
 class A2AGateway:
@@ -298,10 +312,29 @@ class A2AGateway:
         if not peer_uuid:
             return self._error(req_id, -32602, 'peer_uuid required')
         try:
-            content = HISTORY.export(peer_uuid, fmt)
+            limit = int(params.get('limit') or EXPORT_DEFAULT_LIMIT)
+            offset = int(params.get('offset') or 0)
+        except (TypeError, ValueError):
+            return self._error(req_id, -32602, 'limit and offset must be integers')
+        if limit <= 0 or limit > EXPORT_HARD_MAX_LIMIT:
+            return self._error(
+                req_id, -32602,
+                f"limit out of range (1..{EXPORT_HARD_MAX_LIMIT})",
+            )
+        if offset < 0:
+            return self._error(req_id, -32602, 'offset must be >= 0')
+        try:
+            page, total_count = HISTORY.export_page(peer_uuid, fmt, limit=limit, offset=offset)
         except ValueError as e:
             return self._error(req_id, -32602, str(e))
-        return self._result(req_id, {"format": fmt, "content": content})
+        return self._result(req_id, {
+            "format": fmt,
+            "content": page,
+            "limit": limit,
+            "offset": offset,
+            "total_count": total_count,
+            "has_more": offset + limit < total_count,
+        })
 
     def _handle_messages_import(self, req_id, params):
         if HISTORY is None:
@@ -312,6 +345,21 @@ class A2AGateway:
             return self._error(req_id, -32602, 'peer_uuid required')
         if not isinstance(messages, list):
             return self._error(req_id, -32602, 'messages array required')
+        if len(messages) > IMPORT_MAX_MESSAGES:
+            return self._error(
+                req_id, -32602,
+                f"too many messages in one request (got {len(messages)}, max {IMPORT_MAX_MESSAGES})",
+            )
+        for idx, msg in enumerate(messages):
+            if not isinstance(msg, dict):
+                return self._error(req_id, -32602, f"messages[{idx}] must be an object")
+            for p_idx, part in enumerate(msg.get('parts', []) or []):
+                if isinstance(part, dict) and part.get('type') == 'text' and isinstance(part.get('text'), str):
+                    if len(part['text']) > IMPORT_MAX_MESSAGE_SIZE:
+                        return self._error(
+                            req_id, -32602,
+                            f"messages[{idx}].parts[{p_idx}] too large (>{IMPORT_MAX_MESSAGE_SIZE} chars)",
+                        )
         return self._result(req_id, HISTORY.import_messages(peer_uuid, messages))
 
     async def _handle_message_send(self, req_id, params):
@@ -321,7 +369,7 @@ class A2AGateway:
         context_id = params.get('contextId') or params.get('taskId')
         msg_id = msg.get('messageId') or str(uuid.uuid4())
         text = ' '.join(p.get('text', '') for p in parts_in if p.get('type') == 'text')
-        logger.info(f"收到消息: {text[:50]}")
+        logger.info("收到消息: %s", _message_log_summary(text, context_id))
 
         # Workflow hook (unchanged)
         if WORKFLOW_HOOK_CONFIG and WORKFLOW_HOOK_CONFIG["enabled"]:
@@ -341,7 +389,7 @@ class A2AGateway:
 
         # Build response
         tid = str(uuid.uuid4())
-        reply_text = f'AgentWire 回复: 收到 "{text[:30]}..."'
+        reply_text = 'AgentWire 回复: 消息已接收'
         reply_parts = [{'type': 'text', 'text': reply_text}]
 
         # v1.4.3: context injection — attach history metadata to reply
@@ -403,7 +451,7 @@ class A2AGateway:
             msg_id = msg.get('messageId') or str(uuid.uuid4())
             text = ' '.join(p.get('text', '') for p in parts_in if p.get('type') == 'text')
 
-            # Workflow hook
+            logger.info("REST message/send: %s", _message_log_summary(text, context_id))
             if WORKFLOW_HOOK_CONFIG and WORKFLOW_HOOK_CONFIG["enabled"]:
                 try:
                     hook_result = await trigger_workflow_if_match(text, context_id)
@@ -418,7 +466,7 @@ class A2AGateway:
                 peer_uuid, round_n = HISTORY.record_outbound(context_id, msg_id, parts_in, metadata=metadata)
 
             tid = str(uuid.uuid4())
-            reply_text = f'AgentWire: 收到 "{text[:50]}..."'
+            reply_text = 'AgentWire: 消息已接收'
             reply_parts = [{'type': 'text', 'text': reply_text}]
             reply_msg = {
                 'messageId': str(uuid.uuid4()),

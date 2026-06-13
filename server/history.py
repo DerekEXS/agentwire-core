@@ -334,3 +334,51 @@ class HistoryManager:
                     lines.append(f"- **{role}**: {text}\n")
                 return "\n".join(lines)
             raise ValueError(f"unknown format: {fmt}")
+
+    def export_page(self, peer_uuid: str, fmt: str = "jsonl", limit: int = 50, offset: int = 0) -> tuple[str, int]:
+        """Return (page_content, total_count) for paginated export."""
+        with self.lock:
+            msgs = self._read_all_lines(peer_uuid)
+            total = len(msgs)
+            sliced = msgs[offset:offset + limit]
+            if fmt == "jsonl":
+                page = "\n".join(json.dumps(m, ensure_ascii=False) for m in sliced)
+            elif fmt == "markdown":
+                peer = self._index["peers"].get(peer_uuid, {})
+                lines = [f"# Conversation with {peer.get('name', peer_uuid)}", ""]
+                current_round = None
+                for m in sliced:
+                    if m["round"] != current_round:
+                        current_round = m["round"]
+                        lines.append(f"\n## Round {m['round']} — {m['ts']}\n")
+                    role = m["role"].capitalize()
+                    text = " ".join(p.get("text", "") for p in m.get("parts", []) if p.get("type") == "text")
+                    lines.append(f"- **{role}**: {text}\n")
+                page = "\n".join(lines)
+            else:
+                raise ValueError(f"unknown format: {fmt}")
+            return page, total
+
+    def export_page(self, peer_uuid: str, fmt: str = "jsonl", limit: int = 50, offset: int = 0) -> tuple[str, int]:
+        """Return (page_content, total_count) for paginated export."""
+        with self.lock:
+            msgs = self._read_all_lines(peer_uuid)
+            total = len(msgs)
+            sliced = msgs[offset:offset + limit]
+            if fmt == "jsonl":
+                page = "\n".join(json.dumps(m, ensure_ascii=False) for m in sliced)
+            elif fmt == "markdown":
+                peer = self._index["peers"].get(peer_uuid, {})
+                lines = [f"# Conversation with {peer.get('name', peer_uuid)}", ""]
+                current_round = None
+                for m in sliced:
+                    if m["round"] != current_round:
+                        current_round = m["round"]
+                        lines.append(f"\n## Round {m['round']} — {m['ts']}\n")
+                    role = m["role"].capitalize()
+                    text = " ".join(p.get("text", "") for p in m.get("parts", []) if p.get("type") == "text")
+                    lines.append(f"- **{role}**: {text}\n")
+                page = "\n".join(lines)
+            else:
+                raise ValueError(f"unknown format: {fmt}")
+            return page, total
