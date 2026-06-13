@@ -143,10 +143,10 @@ from redact import load_catalog
 h = HistoryManager(td, max_rounds_per_peer=0)
 h.set_patterns(load_catalog()['patterns'])
 u1, r1 = h.record_outbound('ctx-A', 'm1', [
-    {'type':'text','text':'my key is sk-abcdefghijklmnopqrstuvwxyz0123456789012345'}
+    {'type':'text','text':'my key is sk-EXAMPLE_ONLY_DO_NOT_USE_REDACTED'}
 ])
 h.record_inbound(u1, 'm2', [
-    {'type':'text','text':'got it, your key is bearer xyz1234567890abcdefghij'}
+    {'type':'text','text':'got it, your key is bearer EXAMPLE_ONLY_DO_NOT_USE_REDACTED'}
 ])
 # 落盘后:
 # peer_e2725.../peer_e2725...jsonl 1 round / 2 lines / 全部 redact

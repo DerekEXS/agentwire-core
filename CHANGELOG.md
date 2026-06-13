@@ -5,6 +5,25 @@ All notable changes to AgentWire-Core are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.5.2] - 2026-06-13
+
+### Security
+- `/a2a/metrics` now requires the same Bearer auth as `/a2a/jsonrpc` (HMAC constant-time compare).
+- Token-file hygiene warnings log only the basename, never the absolute path.
+- `_message_log_summary` now hashes the peer/context_id before logging so user-controlled identifiers do not leak through the `len= hash= peer=` line.
+- `trigger_workflow_if_match` refuses to invoke a binary outside `WORKFLOW_HOOK_CONFIG.allowed_commands` (default empty = any, but config-driven enforcement is in place).
+- `docs/STATUS_v1.4.3.md` and `examples/` no longer contain real-format demo tokens; replaced with `EXAMPLE_ONLY_DO_NOT_USE_REDACTED`.
+- Docker Compose publishes CORE port on host loopback only by default.
+
+### Changed
+- `docker-compose.yml` image tag bumped to `agentwire-core:v1.5.2`.
+- Plugin manifest `openclaw.plugin.json` now declares `bindHost`, `authToken`, and a `configSchema` block.
+- Removed duplicate `export_page` definition in `server/history.py`; export size envelope is symmetric with import (`import_messages` 64KB cap, `export_page` 64KB cap per message).
+
+### Tests
+- Added v1.5.2 coverage for metrics auth, token log redaction, context_id hash, workflow allowlist, export size cap, and plugin manifest schema.
+- Full CORE suite: 25+ passed.
+
 ## [v1.5.1] - 2026-06-13
 
 ### Security
