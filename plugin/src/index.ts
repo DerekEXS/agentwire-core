@@ -14,6 +14,7 @@ interface Config {
   port?: number;
   bindHost?: string;
   authToken?: string;
+  agentCard?: Partial<typeof DEFAULT_AGENT_CARD>;
   // v1.4.2 AUDIT-FIX #3 (P3): explicit CORS allowlist. No wildcard.
   // Empty = no CORS headers (most secure). Configure in openclaw.plugin.json
   // via "corsOrigins" (string[]) — caller must enumerate origins.
@@ -125,8 +126,20 @@ async function handleRequest(req: any, res: any) {
   }
 }
 
-export function activate(cfg?: Config) {
-  config = { ...config, ...cfg };
+type ConfigInput = Config & { config?: Config };
+
+export function activate(cfg?: ConfigInput) {
+  // OpenClaw may invoke activate() with no config argument — self-load
+  // defaultConfig from the companion manifest file at a well-known path.
+  try {
+    const manifest = require('./openclaw.plugin.json');
+    if (manifest?.defaultConfig && typeof manifest.defaultConfig === 'object') {
+      config = { ...config, ...manifest.defaultConfig };
+    }
+  } catch (_) {}
+  // Merge any config OpenClaw passes at call time (higher priority).
+  const pluginConfig = cfg?.config && typeof cfg.config === 'object' ? cfg.config : cfg;
+  config = { ...config, ...pluginConfig };
   if (config.bindHost === '0.0.0.0') {
     console.warn('[AgentWire Plugin] binding 0.0.0.0; require authToken + firewall before exposing');
   }
