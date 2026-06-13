@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org)
 [![Node](https://img.shields.io/badge/node-18%2B-green)](https://nodejs.org)
-[![Status](https://img.shields.io/badge/status-v1.4.4-green)](https://github.com/DerekEXS/agentwire-core/releases/tag/v1.4.4)
+[![Status](https://img.shields.io/badge/status-v1.5.5-green)](https://github.com/DerekEXS/agentwire-core/releases/tag/v1.5.5)
 
 ---
 
@@ -32,13 +32,19 @@ Workflow orchestration, statecharts, and plugin actions are **out of scope** for
 - **A2A v1.0.1** — full support for `/.well-known/agent.json`, `message/send`, `tasks/*`, agent cards.
 - **JSON-RPC 2.0** over HTTP — standard, language-agnostic transport.
 - **Bearer-token authentication** with file/env/arg resolution, fail-fast on insecure binds.
+- **Loopback-default binds** (`127.0.0.1`); `0.0.0.0` requires explicit `--host` flag and emits a startup warning (v1.4.9).
+- **Built-in TLS** via `--tls-cert` + `--tls-key` (v1.4.9).
 - **CORS allowlist** (explicit origins only, no wildcards).
 - **Per-peer message history** — auto-saved to JSONL, rotatable, with optional FIFO cap.
 - **Context auto-injection** — last N rounds attached to message metadata so agents can resume context.
+- **`messages/import` JSON-RPC endpoint** for history restore scenarios (v1.4.8); 100 messages / 64KB per-part caps (v1.5.1).
+- **`messages/export` pagination** — `limit` / `offset` / `total_count` / `has_more`, max 200 (v1.5.1).
 - **Sensitive-data redaction** — built-in pattern catalog; patterns shared via `/redact/patterns` so client tools reuse the same rules.
-- **Metrics endpoint** for ops monitoring.
-- **Optional workflow hook** to trigger external agents (OpenClaw CLI, etc.) on keyword match.
-- **TypeScript OpenClaw plugin** that reuses OpenClaw's HTTP server.
+- **`/a2a/metrics` requires Bearer auth** — same HMAC compare as `/a2a/jsonrpc` (v1.5.2).
+- **Token file health checks** — UTF-8 BOM auto-strip, CRLF warning, file-permission warning (v1.4.8).
+- **Log redaction** — incoming message text is hashed, never logged in plaintext (v1.5.1).
+- **Workflow-hook allowlist** — `WORKFLOW_HOOK_CONFIG.allowed_commands` enforces external-binary invocation (v1.5.2).
+- **TypeScript OpenClaw plugin** with `agentCard` extension and self-loading `defaultConfig` (v1.5.4).
 
 ## Architecture
 
@@ -69,7 +75,32 @@ The TypeScript plugin (`plugin/`) is one possible binding for OpenClaw-based age
 
 ## Quick Start
 
-### Run the Python A2A service
+### Recommended: Docker Compose (alongside AgentWire-Cue)
+
+The CORE service ships as a container image. Use the Compose stack in
+[`agentwire-cue/docker-compose.yml`](https://github.com/DerekEXS/agentwire-cue/blob/main/docker-compose.yml)
+to bring up CORE + CUE together:
+
+```bash
+git clone https://github.com/DerekEXS/agentwire-cue.git
+cd agentwire-cue
+mkdir -p secrets
+printf '%s\n' 'YOUR_A2A_TOKEN' > secrets/a2a-token.txt
+printf '%s\n' 'YOUR_CUE_ADMIN_TOKEN' > secrets/cue-admin-token.txt
+chmod 600 secrets/*.txt
+docker compose up -d
+
+# Verify health
+docker ps
+curl -s http://127.0.0.1:18800/.well-known/agent.json
+```
+
+CORE listens on `127.0.0.1:18800` by default; CUE on `127.0.0.1:18801` (A2A) +
+`127.0.0.1:19000` (admin).
+
+### Standalone (Python directly)
+
+If you prefer to run CORE outside Docker:
 
 ```bash
 cd server
@@ -107,7 +138,9 @@ npm install
 npm run build
 ```
 
-Drop `dist/` into your OpenClaw plugin loader.
+Drop `dist/` into your OpenClaw plugin loader. The manifest is now
+OpenClaw 2026.6.6-schema-compatible: `additionalProperties: false`, `kind: "http-server"`,
+`uiHints` for the main config fields, and `version: "1.5.5"` synced with the CORE image tag.
 
 ## Configuration
 
@@ -150,7 +183,7 @@ history:
 |--------|------|------|---------|
 | GET | `/.well-known/agent.json` | Optional | Agent Card discovery |
 | GET | `/health` | None | Liveness probe |
-| GET | `/a2a/metrics` | Required | Task counters |
+| GET | `/a2a/metrics` | Bearer (v1.5.2) | Task counters |
 | GET | `/redact/patterns` | Required | Shared redaction pattern catalog |
 | POST | `/a2a/jsonrpc` | Required | JSON-RPC 2.0 endpoint |
 | POST | `/a2a/rest/message/send` | Required | REST wrapper around `message/send` |
@@ -172,6 +205,9 @@ History (v1.4.3 new):
 - `messages/get` — single round (outbound + inbound) for a peer
 - `messages/peers` — list known peers with metadata
 - `messages/export` — dump a peer's history as JSONL or Markdown
+  - Pagination: `limit` (1..200, default 100), `offset`, returns `total_count` + `has_more` (v1.5.1)
+- `messages/import` (v1.4.8) — append imported messages to a peer history
+  - Caps: max 100 messages per request, 64KB per text part, 256KB hard cap (v1.5.1)
 
 For full schemas, see [`skill/PROTOCOL_QUICK_REF.md`](skill/PROTOCOL_QUICK_REF.md).
 
@@ -182,20 +218,21 @@ agentwire-core/
 ├── server/                       # Python A2A service
 │   ├── start.py                  # Main entry point
 │   ├── proxy.py                  # Loopback reverse proxy (18802 → 18800)
-│   ├── history.py                # Per-peer JSONL persistence (v1.4.3)
-│   ├── redact.py                 # Sensitive-pattern catalog (v1.4.3)
+│   ├── history.py                # Per-peer JSONL persistence
+│   ├── redact.py                 # Sensitive-pattern catalog
 │   ├── config.yaml.example       # Configuration template
 │   ├── requirements.txt
+│   ├── Dockerfile                # v1.5.0: python:3.13-slim container build
 │   └── README.md
 │
 ├── plugin/                       # TypeScript OpenClaw plugin
 │   ├── src/
 │   │   └── index.ts
-│   ├── openclaw.plugin.json
+│   ├── openclaw.plugin.json      # v1.5.5: OpenClaw 2026.6.6 schema (additionalProperties, kind, uiHints)
 │   ├── package.json
 │   └── tsconfig.json
 │
-├── skill/                        # v1.4.3 new: agent-facing documentation
+├── skill/                        # Agent-facing documentation
 │   ├── SKILL.md                  # Universal protocol guide
 │   ├── SKILL_CN.md               # 中文版
 │   ├── PROTOCOL_QUICK_REF.md     # Method signatures
@@ -206,6 +243,7 @@ agentwire-core/
 │   ├── INTEGRATION_Generic.md
 │   └── PLUGIN_DEVELOPMENT.md
 │
+├── docker-compose.yml            # v1.5.0: standalone CORE compose
 ├── .gitignore
 ├── LICENSE
 └── README.md                     # This file
@@ -227,31 +265,58 @@ If you are authoring a YAML statechart plugin for an AgentWire-compatible host, 
 
 ## Security
 
-- **Bearer token** required for all non-loopback requests.
+- **Bearer token** required for all non-loopback requests (HMAC constant-time compare).
+- **`/a2a/metrics`** requires Bearer auth (v1.5.2).
 - **CORS** uses explicit origin allowlist (no wildcards).
-- **Fail-fast** on non-loopback bind with empty token.
+- **Loopback default binds** — `127.0.0.1` is the default; `0.0.0.0` requires explicit `--host 0.0.0.0` and logs a startup warning.
+- **TLS support** via `--tls-cert` + `--tls-key` (v1.4.9).
 - **Redaction** of API keys, tokens, JWTs, private keys, and URL-embedded passwords before any history persistence.
+- **Log redaction** — incoming message text is replaced with `len=... sha256[:16]=... peer=...` in logs (v1.5.1).
+- **Token file hygiene** — UTF-8 BOM auto-strip, CRLF + chmod warnings at startup (v1.4.8).
 - **Internal errors** are not leaked to clients (logged server-side, generic 500 returned).
+- **Workflow-hook allowlist** — external binaries invoked by the workflow hook are restricted by `WORKFLOW_HOOK_CONFIG.allowed_commands` (v1.5.2).
 
 ## Deployment
 
-> ⚠️ **v1.4.6 deployment note**: AgentWire CORE uses plain HTTP (not HTTPS). The `Authorization: Bearer <token>` header is therefore transmitted **in cleartext** on the wire.
+> ⚠️ **HTTP-not-HTTPS**: AgentWire CORE uses plain HTTP unless `--tls-cert` + `--tls-key` are supplied. The `Authorization: Bearer <token>` header is therefore transmitted **in cleartext** on the wire unless TLS is enabled.
 
-**Suitable for**:
+### Docker (recommended)
+
+The CORE image (`agentwire-core:v1.5.5`) is published alongside CUE in the
+CUE repository's `docker-compose.yml`. The Compose stack brings up CORE on
+`127.0.0.1:18800` and CUE on `127.0.0.1:18801` + `127.0.0.1:19000`, both with
+loopback-only host publishes and shared token secrets.
+
+```bash
+git clone https://github.com/DerekEXS/agentwire-cue.git
+cd agentwire-cue
+mkdir -p secrets
+printf '%s\n' 'YOUR_A2A_TOKEN' > secrets/a2a-token.txt
+printf '%s\n' 'YOUR_CUE_ADMIN_TOKEN' > secrets/cue-admin-token.txt
+chmod 600 secrets/*.txt
+docker compose up -d
+```
+
+### Standalone
+
+If you want to run CORE outside Docker, see the [Quick Start](#quick-start) above.
+
+### Suitable for
+
 - Loopback-only deployments (single-host agent on `127.0.0.1:18800`)
 - Private LAN / Tailscale / WireGuard segments where the network itself is trusted
+- TLS-terminated reverse proxy fronts (nginx / Caddy / Traefik / Cloudflare Tunnel)
 
-**NOT suitable for**:
-- Direct public-internet exposure (e.g. `0.0.0.0:18800` on a VPS)
+### NOT suitable for
 
-**If you must expose AgentWire to an untrusted network**:
+- Direct public-internet exposure without TLS
 
-1. **Required**: put a TLS-terminating reverse proxy in front (nginx / Caddy / Traefik / Cloudflare Tunnel)
-2. **Recommended**: bind AgentWire to loopback only (`--host 127.0.0.1`); the proxy exposes the public port
+### If you must expose AgentWire to an untrusted network
+
+1. **Required**: put a TLS-terminating reverse proxy in front, **or** run CORE with `--tls-cert` + `--tls-key`
+2. **Recommended**: bind CORE to loopback only (`--host 127.0.0.1`); the proxy exposes the public port
 3. **Strongly recommended**: rotate the bearer token regularly and use a 32+ char random value
 4. **Consider**: mTLS between agents if you control both ends (AgentWire does not implement mTLS — that would be a future enhancement)
-
-A future release (v1.5+) may ship a `aiohttp` TLS mode directly, but for now the deployment boundary is the operator's reverse proxy.
 
 ## Protocol
 

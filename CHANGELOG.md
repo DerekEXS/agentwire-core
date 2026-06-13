@@ -5,6 +5,28 @@ All notable changes to AgentWire-Core are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.5.5] - 2026-06-13
+
+### Changed
+- `plugin/openclaw.plugin.json` adapted to OpenClaw 2026.6.6 strict schema:
+  `additionalProperties: false` on `configSchema`, new top-level `kind: "http-server"`,
+  `version` bumped to `1.5.5` (was `1.0.0`), and full `uiHints` block for the
+  main config fields (`pythonHost`, `pythonPort`, `port`, `authToken`,
+  `corsOrigins`, `agentCard`, `bindHost`).
+- `server/start.py` Agent Card `version` and standalone `docker-compose.yml`
+  image tag unified to `v1.5.5`.
+- `README.md` + `README_CN.md` rewritten to current feature state:
+  status badge `v1.5.5`, Docker Compose quick-start, full feature list
+  (TLS, `messages/import`, export pagination, size limits, `/a2a/metrics` auth,
+  token health checks, log redaction, workflow allowlist), updated API list,
+  updated deployment / security sections.
+
+### Notes
+- v1.5.5 is the **final cleanup release** of the v1.5.x series. No new features,
+  no behavior changes — manifest + documentation alignment only.
+- Companion: [agentwire-cue v1.6.0](https://github.com/DerekEXS/agentwire-cue/releases/tag/v1.6.0)
+  marks the production-ready milestone.
+
 ## [v1.5.4] - 2026-06-13
 
 ### Fixed

@@ -1,7 +1,7 @@
 # AgentWire SKILL — Universal Protocol Guide
 
 > **Language**: English | [中文版 (SKILL_CN.md)](SKILL_CN.md)
-> **Current version**: CORE v1.5.4 / CUE v1.5.7
+> **Current version**: CORE v1.5.5 / CUE v1.6.0
 
 ## What is AgentWire?
 
@@ -172,3 +172,4 @@ MIT License. Copyright (c) 2026 DerekEXS.
 | v1.5.2 | `/a2a/metrics` auth, token path redaction, workflow `allowed_commands`, compose loopback publish, demo tokens replaced |
 | v1.5.3 | All SKILL files updated to current feature state |
 | v1.5.4 | Version string unification + plugin self-loading manifest fix |
+| v1.5.5 | OpenClaw 2026.6.6 schema compat (`additionalProperties`, `kind: "http-server"`, `uiHints`), README refresh |

@@ -38,7 +38,7 @@ DEFAULT_AGENT_CARD = {
     "protocolVersion": "1.0.1",
     "name": "AgentWire",
     "description": "AgentWire A2A v1.0.1 Service",
-    "version": "1.5.4",
+    "version": "1.5.5",
     "capabilities": {"streaming": True, "pushNotifications": False, "extendedAgentCard": False},
     "skills": [],
     "defaultInputModes": ["text"],
