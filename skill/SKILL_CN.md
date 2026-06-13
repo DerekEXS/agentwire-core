@@ -1,7 +1,7 @@
 # AgentWire SKILL 中文版 — 通用协议指南
 
 > **语言**: 简体中文 | [English](SKILL.md)
-> **当前版本**: CORE v1.5.2 / CUE v1.5.7
+> **当前版本**: CORE v1.5.4 / CUE v1.5.7
 
 ## 什么是 AgentWire?
 
@@ -170,3 +170,5 @@ MIT License. Copyright (c) 2026 DerekEXS.
 | v1.5.0 | Docker + compose、`CORE_LISTEN_PORT` / `AGENTWIRE_TOKEN_FILE` 环境变量 |
 | v1.5.1 | 日志脱敏 (`len= hash=`)、导入/导出大小限制与分页、插件入站鉴权 + loopback 绑定 |
 | v1.5.2 | `/a2a/metrics` 鉴权、token 路径脱敏、workflow `allowed_commands`、compose loopback 发布、示例 token 替换 |
+| v1.5.3 | 全部 SKILL 文件同步至当前功能状态 |
+| v1.5.4 | 版本字符串统一 + 插件自加载 manifest 修复 |

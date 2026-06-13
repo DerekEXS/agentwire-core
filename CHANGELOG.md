@@ -5,6 +5,12 @@ All notable changes to AgentWire-Core are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.5.4] - 2026-06-13
+
+### Fixed
+- Version strings unified to `v1.5.4` across `server/start.py`, `SKILL.md`, `SKILL_CN.md`, and `PROTOCOL_QUICK_REF.md`.
+- TypeScript plugin `activate()` now self-loads `openclaw.plugin.json` defaultConfig when OpenClaw invokes without arguments, fixing the `agentCard` extension gap.
+
 ## [v1.5.3] - 2026-06-13
 
 ### Changed

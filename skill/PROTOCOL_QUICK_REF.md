@@ -1,4 +1,4 @@
-# AgentWire A2A v1.0.1 — Protocol Quick Reference (v1.5.2)
+# AgentWire A2A v1.0.1 — Protocol Quick Reference (v1.5.4)
 
 > Compact reference for AgentWire's JSON-RPC and HTTP surface.
 > For full context, see [SKILL.md](SKILL.md).
@@ -255,7 +255,7 @@ history:
 ```json
 {
   "protocolVersion": "1.0.1",
-  "name": "AgentWire", "version": "1.5.2",
+  "name": "AgentWire", "version": "1.5.4",
   "description": "AgentWire A2A v1.0.1 Service",
   "capabilities": {"streaming": true, "pushNotifications": false, "extendedAgentCard": false},
   "skills": [],
