@@ -1,10 +1,11 @@
 {
   "id": "agentwire",
   "name": "AgentWire",
-  "description": "AgentWire A2A v1.0.1 Gateway - OpenClaw TypeScript 插件",
-  "version": "1.0.0",
+  "description": "AgentWire A2A v1.0.1 Gateway - OpenClaw TypeScript plugin",
+  "version": "1.5.5",
+  "kind": "http-server",
   "activation": { "onStartup": true },
-  "extensions": { "httpServers": [{ "port": 18800, "description": "A2A HTTP/JSON-RPC 端点" }] },
+  "extensions": { "httpServers": [{ "port": 18800, "description": "A2A HTTP/JSON-RPC endpoint" }] },
   "defaultConfig": {
     "pythonHost": "127.0.0.1",
     "pythonPort": 18801,
@@ -12,17 +13,49 @@
     "bindHost": "127.0.0.1",
     "authToken": "",
     "protocolVersion": "1.0.1",
-    "agentCard": { "name": "AgentWire", "description": "A2A v1.0.1 Service", "version": "1.0.0", "capabilities": { "streaming": true, "pushNotifications": false, "extendedAgentCard": false }, "skills": [] }
+    "agentCard": { "name": "AgentWire", "description": "A2A v1.0.1 Service", "version": "1.5.5", "capabilities": { "streaming": true, "pushNotifications": false, "extendedAgentCard": false }, "skills": [] }
   },
   "configSchema": {
     "type": "object",
+    "additionalProperties": false,
     "properties": {
       "pythonHost": { "type": "string", "default": "127.0.0.1" },
       "pythonPort": { "type": "integer", "default": 18801 },
       "port": { "type": "integer", "default": 18800 },
       "bindHost": { "type": "string", "default": "127.0.0.1", "description": "v1.5.2: bind host, default 127.0.0.1; only use 0.0.0.0 behind firewall/VPN with authToken." },
       "authToken": { "type": "string", "default": "", "description": "v1.5.2: bearer token required on inbound /a2a/jsonrpc when this plugin is exposed beyond loopback." },
-      "corsOrigins": { "type": "array", "items": { "type": "string" }, "default": [] }
+      "corsOrigins": { "type": "array", "items": { "type": "string" }, "default": [] },
+      "protocolVersion": { "type": "string", "default": "1.0.1" },
+      "agentCard": { "type": "object" }
+    }
+  },
+  "uiHints": {
+    "pythonHost": {
+      "label": "Python 主机",
+      "placeholder": "127.0.0.1"
+    },
+    "pythonPort": {
+      "label": "Python 端口",
+      "placeholder": "18801"
+    },
+    "port": {
+      "label": "插件监听端口",
+      "placeholder": "18800"
+    },
+    "authToken": {
+      "label": "认证令牌",
+      "sensitive": true,
+      "placeholder": "与 CORE token 相同"
+    },
+    "corsOrigins": {
+      "label": "CORS 允许源"
+    },
+    "agentCard": {
+      "label": "Agent Card 覆盖"
+    },
+    "bindHost": {
+      "label": "绑定地址",
+      "placeholder": "127.0.0.1"
     }
   },
   "secrets": {
