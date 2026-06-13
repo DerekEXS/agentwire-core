@@ -63,9 +63,11 @@ Edit `plugin/openclaw.plugin.json`:
 }
 ```
 
-### CORS (v1.4.2+)
+### Security (v1.5.1+)
 
-`corsOrigins` is an explicit allowlist. **No wildcards** (v1.4.2 audit fix #7). To allow a specific web frontend:
+- **Default bind**: `bindHost: "127.0.0.1"` — only use `"0.0.0.0"` behind firewall/VPN with `authToken` set.
+- **Inbound auth**: `/a2a/jsonrpc` requires Bearer auth when `authToken` is configured; unauthenticated LAN exposure returns 401.
+- **CORS**: `corsOrigins` is an explicit allowlist, no wildcards.
 
 ```json
 "corsOrigins": ["https://app.example.com", "http://localhost:3000"]

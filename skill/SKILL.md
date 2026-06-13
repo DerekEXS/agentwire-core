@@ -1,6 +1,7 @@
 # AgentWire SKILL — Universal Protocol Guide
 
 > **Language**: English | [中文版 (SKILL_CN.md)](SKILL_CN.md)
+> **Current version**: CORE v1.5.2 / CUE v1.5.7
 
 ## What is AgentWire?
 
@@ -37,10 +38,11 @@ Do **not** integrate if:
 │         AgentWire A2A Gateway (CORE)          │
 │  - Python aiohttp HTTP server                 │
 │  - JSON-RPC 2.0 over HTTP/1.1                 │
-│  - Bearer-token authentication                │
+│  - Bearer-token auth (hmac.compare_digest)    │
 │  - JSONL history persistence (per-peer)      │
 │  - Sensitive-data redaction (patterns API)   │
-│  - A2A v1.0.1 protocol                        │
+│  - TLS support (--tls-cert / --tls-key)      │
+│  - Docker-compose ready                        │
 └────────────────────────────────────────────────┘
         ▲                              ▲
         │ HTTP + Bearer token          │ HTTP + Bearer token
@@ -64,14 +66,14 @@ AgentWire is **pluggable** on both sides: any agent platform can wrap the JSON-R
 
 ```bash
 # Discover the gateway
-curl -s http://localhost:18800/.well-known/agent.json
+curl -s http://127.0.0.1:18800/.well-known/agent.json
 ```
 
 ```python
 # Send a message
 import requests
 r = requests.post(
-    "http://localhost:18800/a2a/rest/message/send",
+    "http://127.0.0.1:18800/a2a/rest/message/send",
     headers={"Authorization": f"Bearer {TOKEN}"},
     json={"message": {"parts": [{"type": "text", "text": "Hello"}]}},
 )
@@ -84,35 +86,56 @@ That's it — you can talk to AgentWire.
 
 | Capability | API | Notes |
 |------------|-----|-------|
-| Discovery | `GET /.well-known/agent.json` | Returns Agent Card (v1.4.3+; v1.4.2 has a routing bug — see Known Issues) |
+| Discovery | `GET /.well-known/agent.json` | Public; returns Agent Card |
 | Send message | `POST /a2a/rest/message/send` | REST wrapper around `message/send` JSON-RPC |
-| Health check | `GET /health` | v1.4.3+; v1.4.2 has a routing bug |
-| List tasks | `tasks/list` (JSON-RPC) | v1.4.3+ (full JSON-RPC endpoint) |
-| Get task | `tasks/get` (JSON-RPC) | v1.4.3+ |
-| Cancel task | `tasks/cancel` (JSON-RPC) | v1.4.3+ |
-| Message history | `messages/list`, `messages/get`, `messages/peers`, `messages/export` | **v1.4.3 new** |
-| Redaction patterns | `GET /redact/patterns` | **v1.4.3 new** — shared with plugin hosts |
-| Metrics | `GET /a2a/metrics` | task counts |
+| Send message (JSON-RPC) | `POST /a2a/jsonrpc` `message/send` | Full JSON-RPC 2.0 envelope |
+| Health check | `GET /health` | Public; no auth needed |
+| List tasks | `tasks/list` (JSON-RPC) | Bearer auth required |
+| Get task | `tasks/get` (JSON-RPC) | Bearer auth required |
+| Cancel task | `tasks/cancel` (JSON-RPC) | Bearer auth required |
+| Message history | `messages/list`, `messages/get`, `messages/peers` | **v1.4.3**; Bearer auth |
+| Export history | `messages/export` | **v1.4.3**; paginated since v1.5.1 (limit/offset/has_more, max 200) |
+| Import messages | `messages/import` | **v1.4.8**; Bearer auth; max 100 msgs/request, 64KB/part |
+| Redaction patterns | `GET /redact/patterns` | Bearer auth; shared with plugin hosts |
+| Metrics | `GET /a2a/metrics` | **v1.5.2**: Bearer auth required (was public in ≤v1.5.1) |
 
-## Quick Start (operator view)
+## Quick Start
+
+### Recommended: Docker Compose
 
 ```bash
-# 1. Install
+cd agentwire_cue
+mkdir -p secrets
+printf '%s\n' 'YOUR_A2A_TOKEN' > secrets/a2a-token.txt
+printf '%s\n' 'YOUR_ADMIN_TOKEN' > secrets/cue-admin-token.txt
+chmod 600 secrets/*.txt
+docker compose up -d
+curl -s http://127.0.0.1:18800/.well-known/agent.json
+```
+
+### Alternative: native Python
+
+```bash
 cd server
 pip install -r requirements.txt
-cp config.yaml.example config.yaml  # edit if needed
-echo "my-token-123" > /tmp/agentwire.token
-
-# 2. Run (loopback-only, with token)
+echo "YOUR_A2A_TOKEN" > /tmp/agentwire.token
+chmod 600 /tmp/agentwire.token
 python3 start.py --host 127.0.0.1 --port 18800 --token-file /tmp/agentwire.token
-
-# 3. Test
-curl -s http://127.0.0.1:18800/.well-known/agent.json
-curl -X POST http://127.0.0.1:18800/a2a/rest/message/send \
-  -H "Authorization: Bearer my-token-123" \
-  -H "Content-Type: application/json" \
-  -d '{"message":{"parts":[{"type":"text","text":"ping"}]}}'
 ```
+
+## Security defaults (v1.5.x)
+
+- **Default bind**: `127.0.0.1` (loopback only). Use `--host 0.0.0.0` explicitly for LAN/VPN exposure, which logs a startup warning and requires `--token` or `--token-file`.
+- **TLS**: Use `--tls-cert` and `--tls-key` to enable HTTPS (v1.4.9+).
+- **Token hygiene**: Startup checks for UTF-8 BOM, CRLF line endings, and overly broad file permissions (v1.4.8).
+- **Log redaction**: Message text is **never** logged — only `len=` and `sha256[:16]` with a hashed peer identifier (v1.5.1+).
+- **Import/export limits**: `messages/import` caps at 100 messages/request and 64KB/part (hard caps 500/256KB via env). `messages/export` is paginated (default 50 lines, max 200).
+- **Metrics auth**: `/a2a/metrics` requires Bearer auth since v1.5.2.
+- **Workflow hook**: Disabled by default; `allowed_commands` allow-list restricts which binaries can be spawned when `workflow_hook.enabled: true`.
+
+## Publishing
+
+AgentWire uses the `silk-thread` pseudonym for all commits. When SSH to GitHub is intercepted by a local proxy (mihomo TUN), publishes fall back to the [Composio](https://composio.dev) `GITHUB_COMMIT_MULTIPLE_FILES` / `GITHUB_CREATE_A_RELEASE` toolchain. Both paths produce the same public release.
 
 ## Where to read next
 
@@ -128,7 +151,7 @@ curl -X POST http://127.0.0.1:18800/a2a/rest/message/send \
 
 ## License
 
-MIT License. Copyright (c) 2026 DerekEXS. See [LICENSE](../LICENSE).
+MIT License. Copyright (c) 2026 DerekEXS.
 
 ## Protocol & References
 
@@ -137,11 +160,13 @@ MIT License. Copyright (c) 2026 DerekEXS. See [LICENSE](../LICENSE).
 - **Repo**: <https://github.com/DerekEXS/agentwire-core>
 - **Releases**: <https://github.com/DerekEXS/agentwire-core/releases>
 
-## Known issues in v1.4.2 (fixed in v1.4.3)
+## Changelog highlights
 
-- `GET /.well-known/agent.json` and `GET /health` are not routed in v1.4.2 (handler functions exist but `_setup_routes()` does not register them)
-- `POST /a2a/jsonrpc` is not routed; only `/a2a/rest/message/send` is exposed
-- No message-history endpoints
-- No `redact/patterns` endpoint
-
-v1.4.3 closes all of these.
+| Version | Key changes |
+|---------|-------------|
+| v1.4.3 | History persistence, message APIs, redaction catalog |
+| v1.4.8 | `messages/import`, token health diagnostics |
+| v1.4.9 | TLS support, `CORE_LISTEN_HOST` env |
+| v1.5.0 | Docker + compose, `CORE_LISTEN_PORT` / `AGENTWIRE_TOKEN_FILE` env |
+| v1.5.1 | Log redaction (`len= hash=`), import/export size limits & pagination, plugin inbound auth + loopback bind |
+| v1.5.2 | `/a2a/metrics` auth, token path redaction, workflow `allowed_commands`, compose loopback publish, demo tokens replaced |
