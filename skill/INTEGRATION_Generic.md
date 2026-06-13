@@ -1,6 +1,7 @@
 # Integration: Generic / Custom Agents
 
-> How to integrate AgentWire from any language or framework. Use this if your agent is not on OpenClaw, QwenPaw, Hermes, or Claude.
+> How to integrate AgentWire from any language or framework (v1.5.2).
+> Use this if your agent is not on OpenClaw, QwenPaw, Hermes, or Claude.
 
 ## What you need to do
 

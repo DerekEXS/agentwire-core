@@ -1,4 +1,4 @@
-# AgentWire A2A v1.0.1 — Protocol Quick Reference
+# AgentWire A2A v1.0.1 — Protocol Quick Reference (v1.5.2)
 
 > Compact reference for AgentWire's JSON-RPC and HTTP surface.
 > For full context, see [SKILL.md](SKILL.md).
@@ -18,46 +18,41 @@ All non-loopback requests **MUST** carry a Bearer token in the `Authorization` h
 Authorization: Bearer <token>
 ```
 
-Token resolution order on the server:
+Token resolution order on the server (highest priority first):
 
 1. `--token` CLI argument
-2. `--token-file` file (UTF-8 with BOM auto-strip)
+2. `--token-file` file (UTF-8 with BOM auto-strip, defaults to `AGENTWIRE_TOKEN_FILE` env)
 3. `AGENTWIRE_TOKEN` environment variable
 4. Empty = loopback-only (server fails-fast on non-loopback + empty token)
 
-Loopback (127.0.0.1, ::1) requests are allowed without a token (handy for local CUE host).
+Loopback (127.0.0.1, ::1) requests are allowed without a token.
+
+Startup token-health diagnostics (v1.4.8) warn on UTF-8 BOM, CRLF line endings, and overly broad file permissions — without blocking startup.
 
 ## HTTP Endpoints
 
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| GET | `/.well-known/agent.json` | Optional | Agent Card discovery (v1.4.3+; v1.4.2 routing bug) |
-| GET | `/health` | None | Liveness probe (v1.4.3+) |
-| GET | `/a2a/metrics` | Required | Task counters |
-| POST | `/a2a/jsonrpc` | Required | JSON-RPC 2.0 endpoint (v1.4.3+; v1.4.2 routing bug) |
-| POST | `/a2a/rest/message/send` | Required | REST wrapper around `message/send` |
-| GET | `/redact/patterns` | Required | Shared redaction regex catalog (v1.4.3+) |
+| Method | Path | Auth | Auth Since | Purpose |
+|--------|------|------|------------|---------|
+| GET | `/.well-known/agent.json` | None | — | Agent Card discovery |
+| GET | `/health` | None | — | Liveness probe |
+| GET | `/a2a/metrics` | Bearer | v1.5.2 | Task counters |
+| POST | `/a2a/jsonrpc` | Bearer | v1.0 | JSON-RPC 2.0 endpoint |
+| POST | `/a2a/rest/message/send` | Bearer | v1.0 | REST wrapper |
+| GET | `/redact/patterns` | Bearer | v1.4.3 | Shared redaction regex catalog |
 
 ## JSON-RPC Methods
 
 ### `message/send`
 
-Send a message to the gateway. The gateway stores the task and returns a task ID.
-
 **Request**:
 ```json
 {
-  "jsonrpc": "2.0",
-  "id": "req-1",
-  "method": "message/send",
+  "jsonrpc": "2.0", "id": "req-1", "method": "message/send",
   "params": {
     "contextId": "ctx-abc",
     "message": {
-      "messageId": "msg-001",
-      "role": "user",
-      "parts": [
-        {"type": "text", "text": "Hello, agent"}
-      ]
+      "messageId": "msg-001", "role": "user",
+      "parts": [{"type": "text", "text": "Hello, agent"}]
     }
   }
 }
@@ -66,21 +61,19 @@ Send a message to the gateway. The gateway stores the task and returns a task ID
 **Response**:
 ```json
 {
-  "jsonrpc": "2.0",
-  "id": "req-1",
+  "jsonrpc": "2.0", "id": "req-1",
   "result": {
-    "kind": "task",
-    "id": "task-uuid",
-    "contextId": "ctx-abc",
+    "kind": "task", "id": "task-uuid", "contextId": "ctx-abc",
     "status": {"state": "completed"},
     "message": {
-      "messageId": "msg-uuid",
-      "role": "agent",
-      "parts": [{"type": "text", "text": "..."}]
+      "messageId": "msg-uuid", "role": "agent",
+      "parts": [{"type": "text", "text": "AgentWire 回复: 消息已接收"}]
     }
   }
 }
 ```
+
+> v1.5.1: Reply no longer echoes the sender's text; message content is never logged in plaintext.
 
 ### `tasks/get`
 
@@ -100,61 +93,42 @@ Send a message to the gateway. The gateway stores the task and returns a task ID
 {"jsonrpc": "2.0", "id": "req-4", "method": "tasks/cancel", "params": {"taskId": "task-uuid"}}
 ```
 
-### `tasks/subscribe` (v1.4.3+, reserved)
+### `tasks/subscribe` (reserved)
 
 ```json
 {"jsonrpc": "2.0", "id": "req-5", "method": "tasks/subscribe", "params": {"taskId": "task-uuid"}}
 ```
 
-### `agent/getCard` (v1.4.3+)
+### `agent/getCard`
 
 ```json
 {"jsonrpc": "2.0", "id": "req-6", "method": "agent/getCard", "params": {}}
 ```
 
-### `messages/list` (v1.4.3 new)
+### `messages/list`
 
 List recent messages for one or all peers.
 
 ```json
 {
-  "jsonrpc": "2.0",
-  "id": "req-10",
-  "method": "messages/list",
+  "jsonrpc": "2.0", "id": "req-10", "method": "messages/list",
   "params": {
-    "peer_uuid": "a3f29e1c-...",  // optional, omit for all peers
-    "since_round": 38,             // optional
-    "limit": 5                     // default 5, max 100
-  }
-}
-```
-
-**Response**:
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "req-10",
-  "result": {
     "peer_uuid": "a3f29e1c-...",
-    "peer_name": "初梦",
-    "first_round": 1,
-    "last_round": 42,
-    "total_rounds": 42,
-    "messages": [
-      {"round": 38, "ts": "...", "role": "outbound", "msg_id": "...", "parts": [...]},
-      {"round": 38, "ts": "...", "role": "inbound",  "msg_id": "...", "parts": [...]}
-    ]
+    "since_round": 38,
+    "limit": 5
   }
 }
 ```
 
-### `messages/get` (v1.4.3 new)
+**Response**: same envelope with `peer_uuid`, `peer_name`, `first_round`, `last_round`, `total_rounds`, and a `messages` array.
+
+### `messages/get`
 
 ```json
 {"jsonrpc": "2.0", "id": "req-11", "method": "messages/get", "params": {"peer_uuid": "...", "round": 38}}
 ```
 
-### `messages/peers` (v1.4.3 new)
+### `messages/peers`
 
 ```json
 {"jsonrpc": "2.0", "id": "req-12", "method": "messages/peers", "params": {}}
@@ -162,30 +136,78 @@ List recent messages for one or all peers.
 
 **Response**:
 ```json
+{"result": {"peers": [
+  {"uuid": "a3f29e1c", "name": "初梦", "last_round": 42, "total_rounds": 42, "last_ts": "..."}
+]}}
+```
+
+### `messages/export`
+
+Export a peer's history. Pagination added in v1.5.1.
+
+```json
+{
+  "jsonrpc": "2.0", "id": "req-13", "method": "messages/export",
+  "params": {
+    "peer_uuid": "...",
+    "format": "jsonl",
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
+
+**Response**:
+```json
 {
   "result": {
-    "peers": [
-      {"uuid": "a3f29e1c", "name": "初梦", "last_round": 42, "total_rounds": 42, "last_ts": "..."},
-      {"uuid": "f8d2a0b1", "name": "Pawly", "last_round": 17, "total_rounds": 17, "last_ts": "..."}
+    "format": "jsonl", "content": "{...}\n{...}\n",
+    "limit": 50, "offset": 0,
+    "total_count": 142, "has_more": true
+  }
+}
+```
+
+- `limit`: 1..200 (default 50, via `EXPORT_MAX_LIMIT` env)
+- `offset`: 0-based
+- `has_more`: true when there are more messages beyond this page
+
+### `messages/import` (v1.4.8)
+
+Append externally-sourced messages into a peer history. Server assigns round numbers, timestamps, and message ids.
+
+```json
+{
+  "jsonrpc": "2.0", "id": "req-14", "method": "messages/import",
+  "params": {
+    "peer_uuid": "pawly-demo-uuid",
+    "messages": [
+      {
+        "role": "inbound",
+        "parts": [{"type": "text", "text": "urgent: review needed"}],
+        "metadata": {"source": "import-script"}
+      }
     ]
   }
 }
 ```
 
-### `messages/export` (v1.4.3 new)
-
+**Response**:
 ```json
-{"jsonrpc": "2.0", "id": "req-13", "method": "messages/export", "params": {"peer_uuid": "...", "format": "markdown"}}
+{
+  "result": {
+    "imported": 1, "peer_uuid": "pawly-demo-uuid",
+    "first_round": 1, "last_round": 1
+  }
+}
 ```
 
-**Response** (string payload):
-```json
-{"result": {"format": "markdown", "content": "# Conversation with 初梦\n\n[Round 1] ..."}}
-```
+**Limits** (v1.5.1):
+- Max messages per request: 100 (hard cap 500 via `IMPORT_MAX_MESSAGES`)
+- Max text part size: 64KB (hard cap 256KB via `IMPORT_MAX_MESSAGE_SIZE`)
+- Exceeding returns JSON-RPC `-32602 Invalid params`
 
 ## REST `POST /a2a/rest/message/send`
-
-Equivalent to `message/send` JSON-RPC, but without JSON-RPC envelope:
 
 ```http
 POST /a2a/rest/message/send HTTP/1.1
@@ -197,18 +219,18 @@ Content-Type: application/json
 
 Response is the same `result` object from JSON-RPC, returned directly.
 
-## History configuration (v1.4.3)
+## History configuration
 
 ```yaml
 # server/config.yaml
 history:
-  enabled: true               # total switch
-  max_rounds_per_peer: 0      # 0 = unlimited (default), >0 = FIFO cap
+  enabled: true
+  max_rounds_per_peer: 0      # 0 = unlimited, >0 = FIFO cap
   context_rounds: 5           # inject last N rounds as metadata; 0 = off
   storage_dir: ~/.local/share/agentwire/history
-  redact_sensitive: true      # apply patterns from /redact/patterns
+  redact_sensitive: true
   round_close:
-    mode: heuristic           # heuristic | explicit
+    mode: heuristic
     heuristic_idle_seconds: 300
 ```
 
@@ -224,28 +246,20 @@ history:
 
 ## A2A Part types
 
-A2A v1.0.1 supports these `parts[].type` values:
-
 - `text` — `{"type": "text", "text": "..."}`
 - `file` — `{"type": "file", "file": {"name": "...", "mimeType": "...", "uri": "..."}}`
-- `data` — `{"type": "data", "data": {...}}` (JSON-LD friendly)
+- `data` — `{"type": "data", "data": {...}}`
 
-## Agent Card fields (v1.4.3+)
+## Agent Card fields
 
 ```json
 {
   "protocolVersion": "1.0.1",
-  "name": "AgentWire",
-  "description": "...",
-  "version": "1.0.0",
-  "capabilities": {
-    "streaming": true,
-    "pushNotifications": false,
-    "extendedAgentCard": false
-  },
+  "name": "AgentWire", "version": "1.5.2",
+  "description": "AgentWire A2A v1.0.1 Service",
+  "capabilities": {"streaming": true, "pushNotifications": false, "extendedAgentCard": false},
   "skills": [],
-  "defaultInputModes": ["text"],
-  "defaultOutputModes": ["text"]
+  "defaultInputModes": ["text"], "defaultOutputModes": ["text"]
 }
 ```
 
@@ -258,142 +272,88 @@ A2A v1.0.1 supports these `parts[].type` values:
 
 ---
 
-## End-to-end curl walkthrough (v1.4.4)
+## End-to-end curl walkthrough
 
-A complete, copy-pasteable flow that takes you from **zero** to a working A2A session in under 60 seconds. Replaces dozens of spec pages.
+Copy-pasteable flow from **zero** to a working A2A session.
 
-### Setup (one-time)
+### Setup
 
 ```bash
-# Write a demo token
-echo "demo-token-xyz" > /tmp/agentwire.token
-chmod 600 /tmp/agentwire.token
-
-# Start AgentWire CORE in the background
-cd agentwire_core/server
-pip install -r requirements.txt
-cp config.yaml.example config.yaml  # only needed if you want custom history
-python3 start.py --host 127.0.0.1 --port 18800 --token-file /tmp/agentwire.token &
-sleep 1
+# Docker compose (recommended)
+cd agentwire_cue
+mkdir -p secrets
+printf '%s\n' 'demo-token-xyz' > secrets/a2a-token.txt
+printf '%s\n' 'demo-admin-token' > secrets/cue-admin-token.txt
+chmod 600 secrets/*.txt
+docker compose up -d
 ```
 
-### Step 1: discover the gateway
+### Step 1: discover
 
 ```bash
 curl -s http://127.0.0.1:18800/.well-known/agent.json | jq
 ```
 
-Expected: A2A v1.0.1 Agent Card JSON.
-
-### Step 2: send a message (REST)
+### Step 2: send a message
 
 ```bash
 curl -s -X POST http://127.0.0.1:18800/a2a/rest/message/send \
   -H "Authorization: Bearer demo-token-xyz" \
   -H "Content-Type: application/json" \
+  -d '{"contextId":"demo-ctx-001","message":{"parts":[{"type":"text","text":"Hello, world!"}]}}' | jq
+```
+
+### Step 3: check metrics (requires auth since v1.5.2)
+
+```bash
+curl -s -H "Authorization: Bearer demo-token-xyz" \
+  http://127.0.0.1:18800/a2a/metrics | jq
+```
+
+### Step 4: import external history
+
+```bash
+curl -s -X POST http://127.0.0.1:18800/a2a/jsonrpc \
+  -H "Authorization: Bearer demo-token-xyz" \
+  -H "Content-Type: application/json" \
   -d '{
-    "contextId": "demo-ctx-001",
-    "message": {
-      "parts": [{"type": "text", "text": "Hello, world!"}]
+    "jsonrpc":"2.0","id":"1","method":"messages/import",
+    "params":{
+      "peer_uuid":"pawly-demo-uuid",
+      "messages":[{"role":"inbound","parts":[{"type":"text","text":"urgent: video script has typo"}],"metadata":{"source":"import"}}]
     }
   }' | jq
 ```
 
-Expected: a task object with `kind: task`, `id: <uuid>`, `status.state: completed`, and a `message.parts[0].text` reply.
-
-### Step 3: simulate a second agent replying (so history has data)
-
-```bash
-# A different peer ("Pawly" simulated by another contextId) sends a reply
-curl -s -X POST http://127.0.0.1:18800/a2a/rest/message/send \
-  -H "Authorization: Bearer demo-token-xyz" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "contextId": "pawly-session-001",
-    "message": {
-      "parts": [{"type": "text", "text": "urgent: video script has typo"}]
-    }
-  }' | jq
-```
-
-### Step 4: list all known peers (JSON-RPC)
+### Step 5: list all peers
 
 ```bash
 curl -s -X POST http://127.0.0.1:18800/a2a/jsonrpc \
   -H "Authorization: Bearer demo-token-xyz" \
   -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": "1",
-    "method": "messages/peers",
-    "params": {}
-  }' | jq
+  -d '{"jsonrpc":"2.0","id":"2","method":"messages/peers","params":{}}' | jq
 ```
 
-Expected: list of peer objects with `uuid`, `name`, `last_round`, `total_rounds`, `last_ts`.
-
-### Step 5: pull recent history (per-peer)
+### Step 6: pull paginated history
 
 ```bash
-# Replace <peer_uuid> with one from Step 4
 curl -s -X POST http://127.0.0.1:18800/a2a/jsonrpc \
   -H "Authorization: Bearer demo-token-xyz" \
   -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": "2",
-    "method": "messages/list",
-    "params": {"limit": 5}
-  }' | jq
+  -d '{"jsonrpc":"2.0","id":"3","method":"messages/list","params":{"limit":5}}' | jq
 ```
 
-Expected: array of message records, each with `round`, `ts`, `role`, `parts`, `peer_name`. **Sensitive data is auto-redacted** — `Bearer ...` strings become `Bearer [REDACTED:TOKEN]`, API keys become `[REDACTED:OPENAI_KEY]`, etc.
-
-### Step 6: export a peer's history as Markdown (human-readable)
+### Step 7: export paginated
 
 ```bash
-# Get a peer's UUID from Step 4
-PEER=$(curl -s -X POST http://127.0.0.1:18800/a2a/jsonrpc \
-  -H "Authorization: Bearer demo-token-xyz" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":"1","method":"messages/peers","params":{}}' \
-  | jq -r '.result.peers[0].uuid')
-
 curl -s -X POST http://127.0.0.1:18800/a2a/jsonrpc \
   -H "Authorization: Bearer demo-token-xyz" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"jsonrpc\": \"2.0\",
-    \"id\": \"3\",
-    \"method\": \"messages/export\",
-    \"params\": {\"peer_uuid\": \"$PEER\", \"format\": \"markdown\"}
-  }" | jq -r .result.content
-```
-
-Expected: a Markdown document listing each round's outbound + inbound as a dialogue.
-
-### Inspect history files directly
-
-Each peer is a JSONL file on disk — fully human-readable, even without jq:
-
-```bash
-ls -la ~/.local/share/agentwire/history/
-cat ~/.local/share/agentwire/history/peer_<uuid>.jsonl | head
+  -d '{"jsonrpc":"2.0","id":"4","method":"messages/export","params":{"peer_uuid":"pawly-demo-uuid","format":"markdown","limit":50,"offset":0}}' | jq -r .result.content
 ```
 
 ### Teardown
 
 ```bash
-# Stop the background CORE
-kill %1
+docker compose down
 ```
-
-### Troubleshooting
-
-| Symptom | Likely cause |
-|---------|-------------|
-| `401 Unauthorized` | Token mismatch. Re-check `cat /tmp/agentwire.token` matches the `-H "Authorization: ..."` value. |
-| `404 Not Found` on `/health` | Old v1.4.2 (or earlier) binary that didn't register this route. Upgrade to v1.4.3+. |
-| `{"error": "Internal error"}` on `message/send` | Check server log; likely a malformed message body. |
-| Empty `messages/peers` response | No outbound has been sent yet — complete Step 2 first. |
-| `{"error": "history disabled"}` | `history.enabled: false` in `config.yaml`. Set to `true` and restart. |
