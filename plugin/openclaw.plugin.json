@@ -9,8 +9,24 @@
     "pythonHost": "127.0.0.1",
     "pythonPort": 18801,
     "port": 18800,
+    "bindHost": "127.0.0.1",
+    "authToken": "",
     "protocolVersion": "1.0.1",
     "agentCard": { "name": "AgentWire", "description": "A2A v1.0.1 Service", "version": "1.0.0", "capabilities": { "streaming": true, "pushNotifications": false, "extendedAgentCard": false }, "skills": [] }
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "pythonHost": { "type": "string", "default": "127.0.0.1" },
+      "pythonPort": { "type": "integer", "default": 18801 },
+      "port": { "type": "integer", "default": 18800 },
+      "bindHost": { "type": "string", "default": "127.0.0.1", "description": "v1.5.2: bind host, default 127.0.0.1; only use 0.0.0.0 behind firewall/VPN with authToken." },
+      "authToken": { "type": "string", "default": "", "description": "v1.5.2: bearer token required on inbound /a2a/jsonrpc when this plugin is exposed beyond loopback." },
+      "corsOrigins": { "type": "array", "items": { "type": "string" }, "default": [] }
+    }
+  },
+  "secrets": {
+    "a2a-token": { "description": "Token shared between CORE and the plugin's inbound auth.", "type": "string" }
   },
   "capabilities": ["agent-card-discovery", "json-rpc", "streaming", "task-management"],
   "supportedProtocolVersions": ["1.0.1"]

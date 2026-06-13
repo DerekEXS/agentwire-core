@@ -38,7 +38,7 @@ DEFAULT_AGENT_CARD = {
     "protocolVersion": "1.0.1",
     "name": "AgentWire",
     "description": "AgentWire A2A v1.0.1 Service",
-    "version": "1.5.1",
+    "version": "1.5.2",
     "capabilities": {"streaming": True, "pushNotifications": False, "extendedAgentCard": False},
     "skills": [],
     "defaultInputModes": ["text"],
@@ -96,28 +96,29 @@ def check_token_file_hygiene(token_file: str) -> dict:
     issues: list[str] = []
     try:
         data = path.read_bytes()
+        token_label = path.name
         if data.startswith(b'\xef\xbb\xbf'):
             issues.append('utf8_bom')
             logger.warning(
                 "token file %s starts with UTF-8 BOM; fix with: python3 -c \"from pathlib import Path; p=Path('%s'); b=p.read_bytes(); p.write_bytes(b[3:] if b.startswith(b'\\xef\\xbb\\xbf') else b)\"",
-                path, path,
+                token_label, token_label,
             )
         if data.endswith(b'\r\n') or b'\r\n' in data:
             issues.append('crlf_line_ending')
             logger.warning(
                 "token file %s uses CRLF line endings; fix with: perl -pi -e 's/\\r$//' %s",
-                path, path,
+                token_label, token_label,
             )
         mode = path.stat().st_mode & 0o777
         if mode & 0o077:
             issues.append('loose_permissions')
             logger.warning(
                 "token file %s permissions %o are too broad; fix with: chmod 600 %s",
-                path, mode, path,
+                token_label, mode, token_label,
             )
     except OSError as e:
         issues.append('unreadable')
-        logger.warning("token file %s health check failed: %s", path, e)
+        logger.warning("token file %s health check failed: %s", path.name, e)
     if not issues:
         logger.info("token file health check passed: %s", path)
     return {"ok": not issues, "issues": issues}
@@ -169,8 +170,12 @@ EXPORT_HARD_MAX_LIMIT = 200
 
 def _message_log_summary(text: str, peer: str | None = None) -> str:
     digest = hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]
-    peer_part = f" peer={peer}" if peer else ""
-    return f"len={len(text)} hash={digest}{peer_part}"
+    if peer:
+        # v1.5.2: hash peer/context_id before logging so a user-controlled
+        # identifier cannot leak through message_log_summary lines.
+        peer_digest = hashlib.sha256(peer.encode('utf-8')).hexdigest()[:8]
+        return f"len={len(text)} hash={digest} peer={peer_digest}"
+    return f"len={len(text)} hash={digest}"
 
 
 class A2AGateway:
@@ -498,6 +503,11 @@ class A2AGateway:
             return web.json_response({'error': 'Internal error'}, status=500)
 
     async def _handle_metrics(self, req):
+        if not self._check_auth(req):
+            return web.json_response(
+                {'error': 'Unauthorized'}, status=401,
+                headers={'WWW-Authenticate': 'Bearer'},
+            )
         return web.json_response({
             'tasks_total': len(self.tasks),
             'tasks_completed': sum(1 for t in self.tasks.values() if t.get('status', {}).get('state') == 'completed'),
@@ -534,6 +544,12 @@ async def trigger_workflow_if_match(message_text: str, context_id: str = None) -
     cfg = WORKFLOW_HOOK_CONFIG
     if not cfg["enabled"]:
         return {"triggered": False, "reason": "钩子已禁用"}
+
+    allowed_commands = [c for c in (cfg.get("allowed_commands") or []) if c]
+    if allowed_commands:
+        binary = os.path.basename(cfg["openclaw_path"])
+        if binary not in allowed_commands:
+            return {"triggered": False, "reason": f"command {binary!r} not in allowed_commands {allowed_commands}"}
 
     keyword_count = sum(1 for kw in cfg["trigger_keywords"] if kw.lower() in message_text.lower())
     if keyword_count < 2:
