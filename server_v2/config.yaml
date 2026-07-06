@@ -1,0 +1,74 @@
+# CORE v2.0 Gateway Configuration
+# ================================
+# Default listen settings (overridden by CLI args or env vars)
+listen_host: "127.0.0.1"
+listen_port: 18800
+
+# Default routing target when no rules match
+default_agent_id: "main"
+default_peer: "openclaw"
+
+# CORS origins (empty = no CORS headers)
+cors_origins: []
+
+# ------------------------------------------------------------------
+# Routing Rules — determine which agent handles a message
+# Priority: explicit agentId > rule-based > default
+# ------------------------------------------------------------------
+routing_rules:
+  # Script receiver: messages with project: and scenes:
+  - name: "script_receiver"
+    match:
+      tags: ["project:", "scenes:"]
+    target:
+      peer: "cue-worker"
+      agent_id: "script-receiver"
+    priority: 10
+
+  # Owner alerts
+  - name: "owner_alert"
+    match:
+      tags: ["alert:", "owner:"]
+    target:
+      peer: "cue-worker"
+      agent_id: "owner-alert"
+    priority: 10
+
+  # VidHound: video search/analysis
+  - name: "vidhound_video"
+    match:
+      tags: ["video", "search", "analyze"]
+    target:
+      peer: "openclaw"
+      agent_id: "vidhound"
+    priority: 5
+
+  # VidForge: video creation/generation
+  - name: "vidforge_create"
+    match:
+      tags: ["create video", "generate video", "make video"]
+    target:
+      peer: "openclaw"
+      agent_id: "vidforge"
+    priority: 5
+
+  # Default: all unmatched messages go to main agent (初梦)
+  - name: "catch_all_main"
+    match:
+      pattern: ".*"
+    target:
+      peer: "openclaw"
+      agent_id: "main"
+    priority: 0
+
+# ------------------------------------------------------------------
+# Peer Registry — known A2A peers for dispatch
+# ------------------------------------------------------------------
+peers:
+  openclaw:
+    url: "http://127.0.0.1:18789"
+    description: "OpenClaw Gateway - local agent host"
+
+  cue-worker:
+    url: "http://127.0.0.1:18801"
+    description: "AgentWire CUE workflow engine"
