@@ -1,0 +1,5 @@
+# CORE v2.0: A2A Gateway based on a2a-sdk
+a2a-sdk[server]>=1.1.0
+starlette>=0.40.0
+uvicorn>=0.30.0
+PyYAML>=6.0
