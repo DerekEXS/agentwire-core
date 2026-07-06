@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AgentWire Python A2A 服务入口 (v1.4.3)
+"""AgentWire Python A2A 服务入口 (v1.5.6)
 
 v1.4.3 changes vs v1.4.2:
   - Registered previously-orphaned routes: /.well-known/agent.json,
@@ -24,6 +24,7 @@ import sys
 import uuid
 from pathlib import Path
 
+import aiohttp
 import yaml
 from aiohttp import web
 
@@ -38,7 +39,7 @@ DEFAULT_AGENT_CARD = {
     "protocolVersion": "1.0.1",
     "name": "AgentWire",
     "description": "AgentWire A2A v1.0.1 Service",
-    "version": "1.5.5",
+    "version": "1.5.6",
     "capabilities": {"streaming": True, "pushNotifications": False, "extendedAgentCard": False},
     "skills": [],
     "defaultInputModes": ["text"],
@@ -184,6 +185,20 @@ class A2AGateway:
         self.agent_card = agent_card or DEFAULT_AGENT_CARD
         # v1.4.2 AUDIT-FIX #7: CORS restricted to explicit origins (not wildcard).
         self.cors_origins: list[str] = []
+        # v1.5.6: real-time push to CUE listener (restores a2a_content_match native path)
+        self.cue_forward_url: str = os.environ.get("CUE_FORWARD_URL", "http://127.0.0.1:18801/a2a/inbound")
+        self.cue_forward_enabled: bool = os.environ.get("CUE_FORWARD_ENABLED", "1") == "1"
+        self.cue_forward_token: str = ""
+        if self.cue_forward_enabled:
+            token_file = os.environ.get("CUE_FORWARD_TOKEN_FILE", "")
+            if token_file:
+                try:
+                    self.cue_forward_token = Path(token_file).read_text(encoding="utf-8-sig").strip()
+                except Exception as e:
+                    logger.warning("CUE_FORWARD_TOKEN_FILE read failed: %s", e)
+            if not self.cue_forward_token:
+                self.cue_forward_token = self.auth_token  # fallback: CORE's own token
+            logger.info("CUE forward enabled → %s (real-time a2a_content_match)", self.cue_forward_url)
         self.app = web.Application(middlewares=[self._cors_middleware])
         self.runner = None
         self.site = None
@@ -367,6 +382,39 @@ class A2AGateway:
                         )
         return self._result(req_id, HISTORY.import_messages(peer_uuid, messages))
 
+    async def _forward_to_cue(self, msg: dict, context_id: str | None, peer_uuid: str | None) -> None:
+        """v1.5.6: push inbound message to CUE listener (18801) in real-time.
+
+        CUE's A2AListener receives the message and fires a2a_content_match
+        triggers immediately — no polling needed. Non-blocking: if CUE is
+        unreachable (startup race, timeout, etc.), the request still
+        succeeds; CORE + CUE can then fall back to history_change polling.
+        """
+        if not self.cue_forward_enabled:
+            return
+        try:
+            payload = {
+                "jsonrpc": "2.0",
+                "method": "message/send",
+                "params": {"message": msg, "contextId": context_id or str(uuid.uuid4())},
+                "id": f"fwd-{uuid.uuid4().hex[:8]}",
+            }
+            headers = {}
+            if self.cue_forward_token:
+                headers["Authorization"] = f"Bearer {self.cue_forward_token}"
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    self.cue_forward_url, json=payload, headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=5),
+                ) as resp:
+                    logger.info("CUE forward: HTTP %s (peer=%s, msg=%s)",
+                                resp.status, peer_uuid or context_id,
+                                msg.get("messageId", "?")[:24])
+        except asyncio.TimeoutError:
+            logger.warning("CUE forward timeout (peer=%s)", peer_uuid or context_id)
+        except Exception as e:
+            logger.warning("CUE forward failed (non-fatal): %s", e)
+
     async def _handle_message_send(self, req_id, params):
         msg = params.get('message', {}) or {}
         parts_in = msg.get('parts', [])
@@ -391,6 +439,10 @@ class A2AGateway:
         peer_uuid, round_n = None, None
         if HISTORY is not None and HISTORY_CONFIG.get('enabled', True):
             peer_uuid, round_n = HISTORY.record_outbound(context_id, msg_id, parts_in, metadata=metadata)
+
+        # v1.5.6: push to CUE listener for real-time a2a_content_match triggers
+        if peer_uuid:
+            asyncio.create_task(self._forward_to_cue(msg, context_id, peer_uuid))
 
         # Build response
         tid = str(uuid.uuid4())
