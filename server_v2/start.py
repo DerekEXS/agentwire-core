@@ -5,7 +5,7 @@ Rewrites the v1.x message-store into a proper A2A gateway with:
   - Standard A2A endpoints (message/send, tasks/get, etc.) via a2a-sdk
   - Agent routing (explicit agentId + rule-based)
   - Task lifecycle management (submitted → working → completed/failed)
-  - Agent Card discovery (/.well-known/agent.json)
+  - Agent Card discovery (/.well-known/agent.json + /.well-known/agent-card.json)
   - Bearer token auth, loopback default, TLS support
 """
 
@@ -109,6 +109,7 @@ async def root_endpoint(request: Request) -> Response:
         "service": "AgentWire Gateway v2.0",
         "endpoints": {
             "agent_card": "/.well-known/agent.json",
+            "agent_card_alt": "/.well-known/agent-card.json",
             "jsonrpc": "/a2a/jsonrpc",
             "health": "/health",
         },
@@ -269,7 +270,15 @@ def main():
         context_builder=DefaultServerCallContextBuilder(),
     )
 
+    # v2.0.1: expose both agent card paths (like CUE v2.0)
+    # /.well-known/agent.json = standard A2A path (primary)
+    # /.well-known/agent-card.json = compatibility path (from SDK)
+    from a2a.server.request_handlers.response_helpers import agent_card_to_dict
+    async def _agent_card_alt(request: Request) -> Response:
+        return JSONResponse(agent_card_to_dict(agent_card))
+
     custom_routes = [
+        Route("/.well-known/agent.json", _agent_card_alt, methods=["GET"]),
         Route("/health", health_endpoint, methods=["GET"]),
         Route("/", root_endpoint, methods=["GET"]),
     ]
@@ -283,7 +292,7 @@ def main():
     token_middleware = Middleware(
         BearerTokenMiddleware,
         tokens=tokens,
-        exclude_paths=["/.well-known/agent.json", "/health", "/"],
+        exclude_paths=["/.well-known/agent.json", "/.well-known/agent-card.json", "/health", "/"],
     )
 
     middlewares = [token_middleware]
@@ -310,6 +319,7 @@ def main():
 
     log.info("AgentWire Gateway v2.0 starting on %s:%d", host, port)
     log.info("  Agent Card: http://%s:%d/.well-known/agent.json", host, port)
+    log.info("  Agent Card (alt): http://%s:%d/.well-known/agent-card.json", host, port)
     log.info("  JSON-RPC:   http://%s:%d/a2a/jsonrpc", host, port)
 
     uvicorn.run(
