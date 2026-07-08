@@ -5,6 +5,14 @@ All notable changes to AgentWire-Core are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v2.0.3] - 2026-07-08
+
+### 🛡️ Security — Information Leak Sanitization
+- CORE CHANGELOG and `docker/core-config.yaml` stripped of real IP addresses and
+  personal agent names. All peer identifiers in release-tree files now use generic
+  slot names (`remote-peer-a`, `remote-peer-b`) and `<remote-peer-url>` placeholders.
+- Docker image now ships a sanitized default `config.yaml` with no operator-specific values.
+
 ## [v2.0.2] - 2026-07-08
 
 ### 🐛 Bug Fixes
@@ -16,9 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 📦 Build
 - `docker/core-config.yaml`: replaced v1.x history-only config with full v2.0 peer routing
-  configuration (routing rules + peer registry including Pawly).
+  configuration (routing rules + peer registry).
 - `docker-compose.yml` CORE service: mount `peer-a-a2a-token.txt` secret so the container
-  can authenticate to remote peers (e.g. Pawly at 47.109.25.89:18800).
+  can authenticate to remote peers.
 
 ## [v2.0.1] - 2026-07-07
 
@@ -209,9 +217,9 @@ baseline** going into v1.5; no further v1.4.x work is planned.
 - `designs/v1.4.4/SPEC-PATCH.md` (新 ≤30 行): symmetric counterpart to cue 仓 v1.4.4 SPEC-PATCH (v1.4.4 core 侧只做文档增补, 不引入新代码或新设计)
 
 ### Notes
-- v1.4.5 is a **cleanup / spec-debt closure** release — 初梦 P1/P2 行动清单 (commit 拆分 / SHA 校准 / scope 声明 / 设计对称补)
+- v1.4.5 is a **cleanup / spec-debt closure** release — action items and SHA calibration
 - v1.4.5 acceptance: 243 cue 单测 (从 v1.4.4 继承) 全过 + 4 阶段 leak prevention 扫描 v1.4.5 scope 0 命中
-- v1.4.5 commit history (按初梦 P1 建议拆分):
+- v1.4.5 commit history:
   - core 仓 1 commit (`7f2c931`): SHA 校准 + v1.4.4 SPEC-PATCH 对称补
   - cue 仓 2 commits (`75a830d` + `8ce3e03`): STATUS 校准 + scope 声明
 

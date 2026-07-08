@@ -52,7 +52,7 @@ routing_rules:
       agent_id: "vidforge"
     priority: 5
 
-  # Default: all unmatched messages go to main agent (初梦)
+  # Default: all unmatched messages go to main agent
   - name: "catch_all_main"
     match:
       pattern: ".*"
@@ -63,7 +63,9 @@ routing_rules:
 
 # ------------------------------------------------------------------
 # Peer Registry — known A2A peers for dispatch
-# v2.0.2: token_file paths resolved at load time from mounted secrets
+# v2.0.3: token_file paths resolved at load time from mounted secrets
+# NOTE: Replace <remote-peer-url> and peer names with actual values
+# for your deployment. Do not commit real values to the release tree.
 # ------------------------------------------------------------------
 peers:
   openclaw:
@@ -74,8 +76,9 @@ peers:
     url: "http://127.0.0.1:18801"
     description: "AgentWire CUE workflow engine"
 
-  # v2.0.2: remote peer (Pawly) — token resolved via token_file from secret mount
-  pawly:
-    url: "http://47.109.25.89:18800"
-    description: "Pawly (小爪) - QwenPaw agent"
+  # v2.0.2: remote peer — fill in actual URL and token_file path in deployment
+  # Replace <remote-peer-url> with your peer's actual A2A endpoint
+  remote-peer-a:
+    url: "<remote-peer-url>:18800"
+    description: "Remote A2A peer — configure URL and token_file for deployment"
     token_file: "/run/secrets/peer-a-a2a-token.txt"
