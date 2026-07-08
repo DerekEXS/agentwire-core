@@ -1,17 +1,81 @@
-# Baked-in defaults for the Docker image. The compose volume mounts
-# /data, so persistence lives under /data/history regardless of host.
-# Host operators can override by mounting a different config.yaml on
-# top of /app/server/config.yaml.
+# CORE v2.0 Gateway Configuration
+# Baked-in defaults for the Docker image.
+# Host operators can override by mounting a custom config.yaml.
 
-history:
-  enabled: true
-  max_rounds_per_peer: 0
-  context_rounds: 5
-  storage_dir: /data/history
-  redact_sensitive: true
-  round_close:
-    mode: heuristic
-    heuristic_idle_seconds: 300
+listen_host: "0.0.0.0"
+listen_port: 18800
 
-workflow_hook:
-  enabled: false
+# Default routing target when no rules match
+default_agent_id: "main"
+default_peer: "openclaw"
+
+# CORS origins (empty = no CORS headers)
+cors_origins: []
+
+# ------------------------------------------------------------------
+# Routing Rules — Priority: explicit agentId > rule-based > default
+# ------------------------------------------------------------------
+routing_rules:
+  # Script receiver: messages with project: and scenes:
+  - name: "script_receiver"
+    match:
+      tags: ["project:", "scenes:"]
+    target:
+      peer: "cue-worker"
+      agent_id: "script-receiver"
+    priority: 10
+
+  # Owner alerts
+  - name: "owner_alert"
+    match:
+      tags: ["alert:", "owner:"]
+    target:
+      peer: "cue-worker"
+      agent_id: "owner-alert"
+    priority: 10
+
+  # VidHound: video search/analysis
+  - name: "vidhound_video"
+    match:
+      tags: ["video", "search", "analyze"]
+    target:
+      peer: "openclaw"
+      agent_id: "vidhound"
+    priority: 5
+
+  # VidForge: video creation/generation
+  - name: "vidforge_create"
+    match:
+      tags: ["create video", "generate video", "make video"]
+    target:
+      peer: "openclaw"
+      agent_id: "vidforge"
+    priority: 5
+
+  # Default: all unmatched messages go to main agent (初梦)
+  - name: "catch_all_main"
+    match:
+      pattern: ".*"
+    target:
+      peer: "openclaw"
+      agent_id: "main"
+    priority: 0
+
+# ------------------------------------------------------------------
+# Peer Registry — known A2A peers for dispatch
+# v2.0.2: token_file paths resolved at load time from mounted secrets
+# ------------------------------------------------------------------
+peers:
+  openclaw:
+    url: "http://127.0.0.1:18789"
+    description: "OpenClaw Gateway - local agent host"
+
+  cue-worker:
+    url: "http://127.0.0.1:18801"
+    description: "AgentWire CUE workflow engine"
+
+  # v2.0.2: remote peer (Pawly) — token resolved via token_file from secret mount
+  pawly:
+    url: "http://47.109.25.89:18800"
+    description: "Pawly (小爪) - QwenPaw agent"
+    token_file: "/run/secrets/peer-a-a2a-token.txt"

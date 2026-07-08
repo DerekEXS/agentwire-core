@@ -36,4 +36,4 @@ ENV CORE_LISTEN_HOST=0.0.0.0 \
 
 VOLUME ["/data/history", "/data/peers"]
 
-CMD ["python3", "/app/server_v2/start.py", "--token-file", "/run/secrets/a2a-token.txt"]
+CMD ["python3", "-m", "server_v2.start", "--token-file", "/run/secrets/a2a-token.txt"]

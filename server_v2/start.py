@@ -101,7 +101,7 @@ class BearerTokenMiddleware:
 # ---------------------------------------------------------------------------
 
 async def health_endpoint(request: Request) -> Response:
-    return JSONResponse({"status": "ok", "service": "agentwire-core", "version": "2.0.0"})
+    return JSONResponse({"status": "ok", "service": "agentwire-core", "version": "2.0.2"})
 
 
 async def root_endpoint(request: Request) -> Response:
@@ -249,7 +249,7 @@ def main():
     # Agent Card
     agent_card = build_agent_card(
         name=cfg.get("name", "AgentWire Gateway"),
-        version="2.0.0",
+        version="2.0.2",
         listen_host=host,
         listen_port=port,
     )

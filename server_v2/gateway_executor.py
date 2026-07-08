@@ -80,6 +80,14 @@ class GatewayExecutor(AgentExecutor):
             peers = cfg.get("peers", {})
             for name, info in peers.items():
                 if isinstance(info, dict):
+                    # Load token from token_file path if specified
+                    token_file = info.get("token_file")
+                    if token_file:
+                        try:
+                            with open(token_file, "r") as tf:
+                                info["resolved_token"] = tf.read().strip()
+                        except OSError:
+                            pass
                     self._peers[name] = info
             log.info("loaded %d peer configurations", len(self._peers))
         except Exception as e:
@@ -246,14 +254,18 @@ class GatewayExecutor(AgentExecutor):
         context_id: str,
         task_id: str,
     ) -> str:
-        """Dispatch to a remote A2A peer via standard message/send."""
+        """Dispatch to a remote A2A peer via standard SendMessage."""
+        # v2.0.2: use per-peer token from resolved config
+        peer_info = self._peers.get(agent_id, {})  # agent_id used as peer name key here
+        peer_token = peer_info.get("resolved_token", self._openclaw_token)
+
         # Use metadata to pass agentId since A2A standard doesn't have agentId in Message
         send_metadata = dict(metadata or {})
         send_metadata["agentId"] = agent_id
 
         payload = {
             "jsonrpc": "2.0",
-            "method": "message/send",
+            "method": "SendMessage",
             "params": {
                 "message": {
                     "messageId": f"gw-{task_id}",
@@ -262,17 +274,21 @@ class GatewayExecutor(AgentExecutor):
                     "parts": [{"type": "text", "text": text}],
                     "metadata": send_metadata,
                 },
-                "configuration": {"returnImmediately": False},
             },
             "id": task_id,
         }
 
         try:
             async with aiohttp.ClientSession() as session:
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {peer_token}",
+                    "A2A-Version": "1.0",
+                }
                 async with session.post(
                     f"{peer_url}/a2a/jsonrpc",
                     json=payload,
-                    headers={"Content-Type": "application/json"},
+                    headers=headers,
                     timeout=aiohttp.ClientTimeout(total=300),
                 ) as resp:
                     if resp.status == 200:
