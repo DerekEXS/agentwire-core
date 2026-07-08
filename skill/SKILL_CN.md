@@ -1,7 +1,7 @@
 # AgentWire SKILL 中文版 — 通用协议指南
 
 > **语言**: 简体中文 | [English](SKILL.md)
-> **当前版本**: CORE v1.5.5 / CUE v1.6.0
+> **当前版本**: CORE v2.0.1 / CUE v2.0.0
 
 ## 什么是 AgentWire?
 
@@ -70,12 +70,27 @@ curl -s http://127.0.0.1:18800/.well-known/agent.json
 ```
 
 ```python
-# 发送消息
+# 通过标准 A2A JSON-RPC 发送消息
 import requests
 r = requests.post(
-    "http://127.0.0.1:18800/a2a/rest/message/send",
-    headers={"Authorization": f"Bearer {TOKEN}"},
-    json={"message": {"parts": [{"type": "text", "text": "你好"}]}},
+    "http://127.0.0.1:18800/a2a/jsonrpc",
+    headers={
+        "Authorization": f"Bearer {TOKEN}",
+        "A2A-Version": "1.0",
+        "Content-Type": "application/json",
+    },
+    json={
+        "jsonrpc": "2.0",
+        "id": "req-1",
+        "method": "SendMessage",
+        "params": {
+            "message": {
+                "messageId": "msg-001",
+                "role": "user",
+                "parts": [{"type": "text", "text": "你好"}],
+            },
+        },
+    },
 )
 print(r.json())
 ```
@@ -86,18 +101,18 @@ print(r.json())
 
 | 能力 | API | 备注 |
 |------------|-----|-------|
-| 发现 | `GET /.well-known/agent.json` | 公开；返回 Agent Card |
-| 发送消息 | `POST /a2a/rest/message/send` | `message/send` 的 REST 包装 |
-| 发送消息(JSON-RPC) | `POST /a2a/jsonrpc` `message/send` | 完整 JSON-RPC 2.0 信封 |
+| 发现 | `GET /.well-known/agent.json` (主) | 公开；返回标准 A2A Agent Card |
+| 发现（兼容） | `GET /.well-known/agent-card.json` | 同上；来自 a2a-sdk |
+| 发送消息 | `POST /a2a/jsonrpc` `SendMessage` | 标准 A2A gRPC 风格方法（PascalCase） |
+| 取任务 | `POST /a2a/jsonrpc` `GetTask` | 需 Bearer auth；返回 Task 状态 |
+| 列任务 | `POST /a2a/jsonrpc` `ListTasks` | 需 Bearer auth；支持分页 |
+| 取消任务 | `POST /a2a/jsonrpc` `CancelTask` | 需 Bearer auth |
+| 流式 | `POST /a2a/jsonrpc` `SendStreamingMessage` | SSE 流式(v2.0.0+) |
 | 健康检查 | `GET /health` | 公开 |
-| 列任务 | `tasks/list` (JSON-RPC) | 需 Bearer auth |
-| 取任务 | `tasks/get` (JSON-RPC) | 需 Bearer auth |
-| 取消任务 | `tasks/cancel` (JSON-RPC) | 需 Bearer auth |
-| 消息历史 | `messages/list`, `messages/get`, `messages/peers` | **v1.4.3**; 需 Bearer auth |
-| 导出历史 | `messages/export` | **v1.4.3**; v1.5.1 起支持分页(limit/offset/has_more，最大 200) |
-| 导入消息 | `messages/import` | **v1.4.8**; 需 Bearer auth; 每次最多 100 条，单条最大 64KB |
 | 脱敏规律 | `GET /redact/patterns` | 需 Bearer auth; 共享给插件 host |
 | 指标 | `GET /a2a/metrics` | **v1.5.2**: 需要 Bearer auth（≤v1.5.1 时公开） |
+
+> **版本说明 (v2.0.0)**: 标准 A2A 方法名采用 **PascalCase**（如 `SendMessage`，而不是 REST 风格的 `message/send`），与 a2a-sdk 的 protobuf 调度一致。`/a2a/rest/message/send` REST 路径已**移除**；请改用标准 `/a2a/jsonrpc` 加上 `SendMessage` 方法。旧的 `messages/list`、`messages/get`、`messages/peers`、`messages/import`、`messages/export` 方法在 v1.x server（端口 18800）仍可用以保持向后兼容，但不再是推荐路径。完整方法列表见 [PROTOCOL_QUICK_REF.md](PROTOCOL_QUICK_REF.md)。
 
 ## 快速启动
 
@@ -173,3 +188,6 @@ MIT License. Copyright (c) 2026 DerekEXS.
 | v1.5.3 | 全部 SKILL 文件同步至当前功能状态 |
 | v1.5.4 | 版本字符串统一 + 插件自加载 manifest 修复 |
 | v1.5.5 | OpenClaw 2026.6.6 schema 适配(`additionalProperties`、`kind: "http-server"`、`uiHints`)、README 刷新 |
+| v1.5.6 | CORE 实时推送 CUE（`_forward_to_cue()`）—— 恢复 `a2a_content_match` push 路径 |
+| **v2.0.0** | **架构重写**：基于官方 `a2a-sdk>=1.1.0`。标准 A2A 方法（PascalCase `SendMessage`、`GetTask`、`ListTasks`、`CancelTask`、`SendStreamingMessage`），SQLite TaskStore，agent 路由（显式 → 规则 → 默认），Agent Card 在 `/.well-known/agent.json`，Bearer token 中间件（`hmac.compare_digest`），Dockerfile.v2 |
+| **v2.0.1** | **Hotfix**：同时暴露 `/.well-known/agent.json`（标准 A2A 主路径）与 `/.well-known/agent-card.json`（SDK 兼容路径），两者返回内容相同，与 CUE v2.0 行为一致 |

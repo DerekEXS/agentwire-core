@@ -34,6 +34,11 @@ from hermes import Agent, message_handler
 
 AGENTWIRE = os.getenv("AGENTWIRE_URL", "http://127.0.0.1:18800")
 TOKEN = os.environ["AGENTWIRE_TOKEN"]
+HEADERS = {
+    "Authorization": f"Bearer {TOKEN}",
+    "A2A-Version": "1.0",
+    "Content-Type": "application/json",
+}
 
 class AgentWireAdapter(Agent):
     name = "agentwire"
@@ -43,12 +48,27 @@ class AgentWireAdapter(Agent):
     async def handle(self, msg):
         async with aiohttp.ClientSession() as s:
             async with s.post(
-                f"{AGENTWIRE}/a2a/rest/message/send",
-                headers={"Authorization": f"Bearer {TOKEN}"},
-                json={"message": {"parts": [{"type": "text", "text": msg.text}]}},
+                f"{AGENTWIRE}/a2a/jsonrpc",
+                headers=HEADERS,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": "1",
+                    "method": "SendMessage",
+                    "params": {
+                        "message": {
+                            "messageId": "msg-001",
+                            "role": "ROLE_USER",
+                            "parts": [{"type": "text", "text": msg.text}],
+                        },
+                        "configuration": {"returnImmediately": False},
+                    },
+                },
             ) as r:
                 data = await r.json()
-        parts = data.get("message", {}).get("parts", [])
+        # v2.0: response shape uses task.status.message
+        task = data.get("result", {}).get("task", {})
+        parts = task.get("status", {}).get("message", {}).get("parts", []) \
+            or data.get("result", {}).get("message", {}).get("parts", [])
         return msg.reply(" ".join(p.get("text", "") for p in parts if p.get("type") == "text"))
 ```
 
@@ -57,6 +77,7 @@ class AgentWireAdapter(Agent):
 ```rust
 // src/bin/agentwire_hermes.rs
 use hermes::prelude::*;
+use reqwest::header::HeaderMap;
 use reqwest::Client;
 use std::env;
 
@@ -72,11 +93,24 @@ async fn main() {
             let token = token.clone();
             async move {
                 let body = serde_json::json!({
-                    "message": {"parts": [{"type": "text", "text": msg.text}]}
+                    "jsonrpc": "2.0",
+                    "id": "1",
+                    "method": "SendMessage",
+                    "params": {
+                        "message": {
+                            "messageId": "msg-001",
+                            "role": "ROLE_USER",
+                            "parts": [{"type": "text", "text": msg.text}],
+                        },
+                        "configuration": {"returnImmediately": false},
+                    },
                 });
+                let mut headers = HeaderMap::new();
+                headers.insert("Authorization", format!("Bearer {}", token).parse().unwrap());
+                headers.insert("A2A-Version", "1.0".parse().unwrap());
                 let resp: serde_json::Value = client
-                    .post(format!("{}/a2a/rest/message/send", url))
-                    .header("Authorization", format!("Bearer {}", token))
+                    .post(format!("{}/a2a/jsonrpc", url))
+                    .headers(headers)
                     .json(&body)
                     .send().await?
                     .json().await?;
@@ -91,9 +125,9 @@ async fn main() {
 
 Hermes often runs multiple specialized agents in one process. Pattern:
 
-1. Hermes A2A adapter subscribes to AgentWire `message/send` events
+1. Hermes A2A adapter subscribes to AgentWire `SendMessage` events
 2. Routes based on message prefix (`/aw:foo` → foo agent, etc.)
-3. Responses routed back via AgentWire `tasks/subscribe`
+3. Responses routed back via AgentWire `SendStreamingMessage` (SSE)
 
 ## See also
 

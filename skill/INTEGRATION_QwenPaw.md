@@ -42,9 +42,24 @@ import aiohttp, asyncio, os
 async def send(text: str) -> dict:
     async with aiohttp.ClientSession() as s:
         r = await s.post(
-            "http://127.0.0.1:18800/a2a/rest/message/send",
-            headers={"Authorization": f"Bearer {os.environ['AGENTWIRE_TOKEN']}"},
-            json={"message": {"parts": [{"type": "text", "text": text}]}},
+            "http://127.0.0.1:18800/a2a/jsonrpc",
+            headers={
+                "Authorization": f"Bearer {os.environ['AGENTWIRE_TOKEN']}",
+                "A2A-Version": "1.0",
+            },
+            json={
+                "jsonrpc": "2.0",
+                "id": "1",
+                "method": "SendMessage",
+                "params": {
+                    "message": {
+                        "messageId": "msg-001",
+                        "role": "ROLE_USER",
+                        "parts": [{"type": "text", "text": text}],
+                    },
+                    "configuration": {"returnImmediately": False},
+                },
+            },
         )
         return await r.json()
 
@@ -62,18 +77,38 @@ from qwenpaw import skill, message  # QwenPaw SDK
 
 AGENTWIRE_URL = os.getenv("AGENTWIRE_URL", "http://127.0.0.1:18800")
 AGENTWIRE_TOKEN = os.environ["AGENTWIRE_TOKEN"]
+HEADERS = {
+    "Authorization": f"Bearer {AGENTWIRE_TOKEN}",
+    "A2A-Version": "1.0",
+    "Content-Type": "application/json",
+}
 
 @skill(name="agentwire_send")
 async def agentwire_send(text: str) -> str:
     """Forward `text` to AgentWire and return the reply text."""
     async with aiohttp.ClientSession() as s:
         async with s.post(
-            f"{AGENTWIRE_URL}/a2a/rest/message/send",
-            headers={"Authorization": f"Bearer {AGENTWIRE_TOKEN}"},
-            json={"message": {"parts": [{"type": "text", "text": text}]}},
+            f"{AGENTWIRE_URL}/a2a/jsonrpc",
+            headers=HEADERS,
+            json={
+                "jsonrpc": "2.0",
+                "id": "1",
+                "method": "SendMessage",
+                "params": {
+                    "message": {
+                        "messageId": "msg-001",
+                        "role": "ROLE_USER",
+                        "parts": [{"type": "text", "text": text}],
+                    },
+                    "configuration": {"returnImmediately": False},
+                },
+            },
         ) as r:
             data = await r.json()
-    parts = data.get("message", {}).get("parts", [])
+    # v2.0: response shape uses task.status.message
+    task = data.get("result", {}).get("task", {})
+    msg = task.get("status", {}).get("message", {})
+    parts = msg.get("parts", []) or data.get("result", {}).get("message", {}).get("parts", [])
     return " ".join(p.get("text", "") for p in parts if p.get("type") == "text")
 ```
 
@@ -89,25 +124,28 @@ async def handle(msg):
     return None
 ```
 
-## Reading history (v1.4.3+)
+## Reading recent tasks (v2.0+)
 
-If you want your QwenPaw agent to know what it said to other agents recently:
+If you want your QwenPaw agent to know its recent task activity:
 
 ```python
-async def recent_with(peer_name: str, limit: int = 5) -> list[dict]:
+async def recent_tasks(page_size: int = 5) -> list[dict]:
     async with aiohttp.ClientSession() as s:
         async with s.post(
             f"{AGENTWIRE_URL}/a2a/jsonrpc",
-            headers={"Authorization": f"Bearer {AGENTWIRE_TOKEN}"},
+            headers={
+                "Authorization": f"Bearer {AGENTWIRE_TOKEN}",
+                "A2A-Version": "1.0",
+            },
             json={
                 "jsonrpc": "2.0",
-                "id": 1,
-                "method": "messages/list",
-                "params": {"peer_name": peer_name, "limit": limit},
+                "id": "1",
+                "method": "ListTasks",
+                "params": {"pageSize": page_size},
             },
         ) as r:
             data = await r.json()
-    return data["result"]["messages"]
+    return data["result"]["tasks"]
 ```
 
 ## Companion project: `agentwire-cue`

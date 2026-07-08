@@ -1,7 +1,7 @@
 # Plugin Development Guide (for `agentwire-cue`)
 
 > How to author statechart plugins for [agentwire-cue](https://github.com/DerekEXS/agentwire-cue).
-> For the complete v1.5 reference, see [PLUGIN_AUTHORING.md](../agentwire_cue/skill/PLUGIN_AUTHORING.md) in the CUE repository.
+> For the complete v2.0 reference, see [PLUGIN_AUTHORING.md](../agentwire_cue/skill/PLUGIN_AUTHORING.md) in the CUE repository.
 
 ## Overview
 
@@ -66,7 +66,8 @@ spec:
 |------|-------------|
 | `cron` | Recurring schedule (`expression: "0 * * * *"`) |
 | `a2a_message_type` | Inbound A2A message on the CUE listener (port 18801) |
-| `history_change` | New round detected in CORE peer history (polls `messages/peers`) |
+| `a2a_content_match` (v1.6.x+) | Inbound A2A message content matching keywords (real-time, event-driven) |
+| `history_change` | New round detected in CORE peer history. **v2.0+**: also real-time event-driven via CORE push; **v1.5.x**: legacy polling fallback |
 
 ### Expressions
 

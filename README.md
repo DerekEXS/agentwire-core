@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org)
 [![Node](https://img.shields.io/badge/node-18%2B-green)](https://nodejs.org)
-[![Status](https://img.shields.io/badge/status-v1.5.5-green)](https://github.com/DerekEXS/agentwire-core/releases/tag/v1.5.5)
+[![Status](https://img.shields.io/badge/status-v2.0.1-green)](https://github.com/DerekEXS/agentwire-core/releases/tag/v2.0.1)
 
 ---
 
@@ -29,19 +29,23 @@ Workflow orchestration, statecharts, and plugin actions are **out of scope** for
 
 ## Features
 
-- **A2A v1.0.1** — full support for `/.well-known/agent.json`, `message/send`, `tasks/*`, agent cards.
-- **JSON-RPC 2.0** over HTTP — standard, language-agnostic transport.
-- **Bearer-token authentication** with file/env/arg resolution, fail-fast on insecure binds.
-- **Loopback-default binds** (`127.0.0.1`); `0.0.0.0` requires explicit `--host` flag and emits a startup warning (v1.4.9).
-- **Built-in TLS** via `--tls-cert` + `--tls-key` (v1.4.9).
+- **A2A v1.0** — based on official [a2a-sdk](https://pypi.org/project/a2a-sdk/) v1.1.0+
+  - Standard Agent Card exposed on both `/.well-known/agent.json` and `/.well-known/agent-card.json`
+  - Standard A2A methods (PascalCase): `SendMessage`, `GetTask`, `ListTasks`, `CancelTask`, `SendStreamingMessage`
+  - Task lifecycle state machine: `SUBMITTED → WORKING → COMPLETED / FAILED / CANCELED`
+- **JSON-RPC 2.0** over HTTP — standard, language-agnostic transport (`/a2a/jsonrpc`).
+- **Three-tier agent routing** — explicit `agentId` → rule-based (tags / patterns / priority) → default fallback (v2.0).
+- **SQLite TaskStore** — persisted Task lifecycle with indexed queries (v2.0).
+- **Bearer-token authentication** with file/env/arg resolution, fail-fast on insecure binds (`hmac.compare_digest`).
+- **Loopback-default binds** (`127.0.0.1`); `0.0.0.0` requires explicit `--host` flag and emits a startup warning (v1.4.9+).
+- **Built-in TLS** via `--tls-cert` + `--tls-key` (v1.4.9+).
 - **CORS allowlist** (explicit origins only, no wildcards).
-- **Per-peer message history** — auto-saved to JSONL, rotatable, with optional FIFO cap.
-- **Context auto-injection** — last N rounds attached to message metadata so agents can resume context.
-- **`messages/import` JSON-RPC endpoint** for history restore scenarios (v1.4.8); 100 messages / 64KB per-part caps (v1.5.1).
-- **`messages/export` pagination** — `limit` / `offset` / `total_count` / `has_more`, max 200 (v1.5.1).
-- **Sensitive-data redaction** — built-in pattern catalog; patterns shared via `/redact/patterns` so client tools reuse the same rules.
-- **`/a2a/metrics` requires Bearer auth** — same HMAC compare as `/a2a/jsonrpc` (v1.5.2).
-- **Token file health checks** — UTF-8 BOM auto-strip, CRLF warning, file-permission warning (v1.4.8).
+- **Sensitive-data redaction** — built-in pattern catalog; patterns shared via `/redact/patterns` so client tools reuse the same rules (v1.4.3+).
+- **Token file health checks** — UTF-8 BOM auto-strip, CRLF warning, file-permission warning (v1.4.8+).
+- **Log redaction** — incoming message text is hashed, never logged in plaintext (v1.5.1+).
+- **Legacy compatibility**: v1.x `messages/*` JSON-RPC methods and `/a2a/rest/message/send` endpoint
+  remain available on port 18800 for gradual migration; new agents should use the standard A2A
+  methods above.
 - **Log redaction** — incoming message text is hashed, never logged in plaintext (v1.5.1).
 - **Workflow-hook allowlist** — `WORKFLOW_HOOK_CONFIG.allowed_commands` enforces external-binary invocation (v1.5.2).
 - **TypeScript OpenClaw plugin** with `agentCard` extension and self-loading `defaultConfig` (v1.5.4).
@@ -123,11 +127,24 @@ curl -s http://127.0.0.1:18800/.well-known/agent.json
 # Health
 curl -s http://127.0.0.1:18800/health
 
-# Send a message
-curl -X POST http://127.0.0.1:18800/a2a/rest/message/send \
+# Send a message (standard A2A JSON-RPC)
+curl -X POST http://127.0.0.1:18800/a2a/jsonrpc \
   -H "Authorization: Bearer my-token-123" \
+  -H "A2A-Version: 1.0" \
   -H "Content-Type: application/json" \
-  -d '{"message":{"parts":[{"type":"text","text":"Hello"}]}}'
+  -d '{
+    "jsonrpc":"2.0",
+    "id":"req-1",
+    "method":"SendMessage",
+    "params":{
+      "message":{
+        "messageId":"msg-001",
+        "role":"ROLE_USER",
+        "parts":[{"type":"text","text":"Hello"}]
+      },
+      "configuration":{"returnImmediately":false}
+    }
+  }'
 ```
 
 ### Build the TypeScript OpenClaw plugin (optional)
@@ -186,28 +203,22 @@ history:
 | GET | `/a2a/metrics` | Bearer (v1.5.2) | Task counters |
 | GET | `/redact/patterns` | Required | Shared redaction pattern catalog |
 | POST | `/a2a/jsonrpc` | Required | JSON-RPC 2.0 endpoint |
-| POST | `/a2a/rest/message/send` | Required | REST wrapper around `message/send` |
+| POST | `/a2a/jsonrpc` | Required | Standard A2A JSON-RPC endpoint (all methods) |
 
 ## JSON-RPC Methods
 
-Standard A2A v1.0.1:
+Standard A2A v1.0 (v2.0+):
 
-- `message/send` — send a message, get a task back
-- `tasks/get` — fetch a task by ID
-- `tasks/list` — list all tasks in memory
-- `tasks/cancel` — cancel a task
-- `tasks/subscribe` — reserve a subscription (no-op stub)
-- `agent/getCard` — return the Agent Card
+- `SendMessage` — send a message, get a Task back
+- `GetTask` — fetch a Task by ID
+- `ListTasks` — list all Tasks (with pagination)
+- `CancelTask` — cancel a Task
+- `SendStreamingMessage` — SSE-based streaming (v2.0+)
+- `GetExtendedAgentCard` — return the extended Agent Card
 
-History (v1.4.3 new):
+Legacy-compatible (kept on the v1.5.x server; not used by v2.0+):
 
-- `messages/list` — recent messages for one or all peers
-- `messages/get` — single round (outbound + inbound) for a peer
-- `messages/peers` — list known peers with metadata
-- `messages/export` — dump a peer's history as JSONL or Markdown
-  - Pagination: `limit` (1..200, default 100), `offset`, returns `total_count` + `has_more` (v1.5.1)
-- `messages/import` (v1.4.8) — append imported messages to a peer history
-  - Caps: max 100 messages per request, 64KB per text part, 256KB hard cap (v1.5.1)
+- `messages/list`, `messages/get`, `messages/peers`, `messages/export`, `messages/import`
 
 For full schemas, see [`skill/PROTOCOL_QUICK_REF.md`](skill/PROTOCOL_QUICK_REF.md).
 
@@ -282,7 +293,7 @@ If you are authoring a YAML statechart plugin for an AgentWire-compatible host, 
 
 ### Docker (recommended)
 
-The CORE image (`agentwire-core:v1.5.5`) is published alongside CUE in the
+The CORE image (`agentwire-core:v2.0.1`) is published alongside CUE in the
 CUE repository's `docker-compose.yml`. The Compose stack brings up CORE on
 `127.0.0.1:18800` and CUE on `127.0.0.1:18801` + `127.0.0.1:19000`, both with
 loopback-only host publishes and shared token secrets.

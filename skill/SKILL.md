@@ -1,7 +1,7 @@
 # AgentWire SKILL — Universal Protocol Guide
 
 > **Language**: English | [中文版 (SKILL_CN.md)](SKILL_CN.md)
-> **Current version**: CORE v1.5.5 / CUE v1.6.0
+> **Current version**: CORE v2.0.1 / CUE v2.0.0
 
 ## What is AgentWire?
 
@@ -70,12 +70,27 @@ curl -s http://127.0.0.1:18800/.well-known/agent.json
 ```
 
 ```python
-# Send a message
+# Send a message via standard A2A JSON-RPC
 import requests
 r = requests.post(
-    "http://127.0.0.1:18800/a2a/rest/message/send",
-    headers={"Authorization": f"Bearer {TOKEN}"},
-    json={"message": {"parts": [{"type": "text", "text": "Hello"}]}},
+    "http://127.0.0.1:18800/a2a/jsonrpc",
+    headers={
+        "Authorization": f"Bearer {TOKEN}",
+        "A2A-Version": "1.0",
+        "Content-Type": "application/json",
+    },
+    json={
+        "jsonrpc": "2.0",
+        "id": "req-1",
+        "method": "SendMessage",
+        "params": {
+            "message": {
+                "messageId": "msg-001",
+                "role": "user",
+                "parts": [{"type": "text", "text": "Hello"}],
+            },
+        },
+    },
 )
 print(r.json())
 ```
@@ -86,18 +101,23 @@ That's it — you can talk to AgentWire.
 
 | Capability | API | Notes |
 |------------|-----|-------|
-| Discovery | `GET /.well-known/agent.json` | Public; returns Agent Card |
-| Send message | `POST /a2a/rest/message/send` | REST wrapper around `message/send` JSON-RPC |
-| Send message (JSON-RPC) | `POST /a2a/jsonrpc` `message/send` | Full JSON-RPC 2.0 envelope |
+| Discovery | `GET /.well-known/agent.json` (primary) | Public; returns standard A2A Agent Card |
+| Discovery (compat) | `GET /.well-known/agent-card.json` | Same content; from a2a-sdk |
+| Send message | `POST /a2a/jsonrpc` `SendMessage` | Standard A2A gRPC-style method (PascalCase) |
+| Get task | `POST /a2a/jsonrpc` `GetTask` | Bearer auth required; returns Task lifecycle |
+| List tasks | `POST /a2a/jsonrpc` `ListTasks` | Bearer auth; supports pagination |
+| Cancel task | `POST /a2a/jsonrpc` `CancelTask` | Bearer auth required |
+| Streaming | `POST /a2a/jsonrpc` `SendStreamingMessage` | SSE-based streaming (v2.0.0+) |
 | Health check | `GET /health` | Public; no auth needed |
-| List tasks | `tasks/list` (JSON-RPC) | Bearer auth required |
-| Get task | `tasks/get` (JSON-RPC) | Bearer auth required |
-| Cancel task | `tasks/cancel` (JSON-RPC) | Bearer auth required |
-| Message history | `messages/list`, `messages/get`, `messages/peers` | **v1.4.3**; Bearer auth |
-| Export history | `messages/export` | **v1.4.3**; paginated since v1.5.1 (limit/offset/has_more, max 200) |
-| Import messages | `messages/import` | **v1.4.8**; Bearer auth; max 100 msgs/request, 64KB/part |
 | Redaction patterns | `GET /redact/patterns` | Bearer auth; shared with plugin hosts |
 | Metrics | `GET /a2a/metrics` | **v1.5.2**: Bearer auth required (was public in ≤v1.5.1) |
+
+> **Versioning note (v2.0.0)**: Standard A2A method names are **PascalCase** (`SendMessage`, not `message/send`)
+> matching the a2a-sdk protobuf-based dispatch. The `/a2a/rest/message/send` REST path is **removed**; use
+> standard `/a2a/jsonrpc` with method `SendMessage`. The legacy `messages/list`, `messages/get`, `messages/peers`,
+> `messages/import`, `messages/export` methods are **still available** on the v1.x server (port 18800) for backward
+> compatibility but are no longer the recommended path. See [PROTOCOL_QUICK_REF.md](PROTOCOL_QUICK_REF.md) for the
+> full method list.
 
 ## Quick Start
 
@@ -173,3 +193,6 @@ MIT License. Copyright (c) 2026 DerekEXS.
 | v1.5.3 | All SKILL files updated to current feature state |
 | v1.5.4 | Version string unification + plugin self-loading manifest fix |
 | v1.5.5 | OpenClaw 2026.6.6 schema compat (`additionalProperties`, `kind: "http-server"`, `uiHints`), README refresh |
+| v1.5.6 | Real-time CUE forward via `_forward_to_cue()` — restores `a2a_content_match` push path |
+| **v2.0.0** | **Architecture rewrite**: based on official `a2a-sdk>=1.1.0`. Standard A2A methods (PascalCase `SendMessage`, `GetTask`, `ListTasks`, `CancelTask`, `SendStreamingMessage`), SQLite TaskStore, agent routing (explicit → rule-based → default), Agent Card on `/.well-known/agent.json`, Bearer token middleware with `hmac.compare_digest`, Dockerfile.v2 |
+| **v2.0.1** | **Hotfix**: expose both `/.well-known/agent.json` (standard A2A primary) and `/.well-known/agent-card.json` (SDK compat path). Both return identical Agent Card content, matching CUE v2.0 behavior |

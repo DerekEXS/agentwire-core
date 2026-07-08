@@ -5,6 +5,47 @@ All notable changes to AgentWire-Core are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v2.0.1] - 2026-07-07
+
+### 🐛 Bug Fixes
+- Agent Card discovery path: expose both `/.well-known/agent.json` (standard A2A primary)
+  and `/.well-known/agent-card.json` (SDK compat path). Both return identical Agent Card
+  content, matching CUE v2.0 behavior. Resolves ambiguity raised by 3rd-party agents
+  that hardcoded either path.
+
+## [v2.0.0] - 2026-07-07
+
+### 🚀 Architecture Rewrite
+- **Rewritten** as a proper A2A v1.0 gateway based on the official [a2a-sdk](https://pypi.org/project/a2a-sdk/) v1.1.0+.
+  Replaces the v1.x "message store + HTTP API" model that did not implement the
+  standard A2A protocol. All standard A2A methods are now handled by the SDK's
+  `DefaultRequestHandler`.
+
+### ✨ Added
+- Standard A2A method names (PascalCase, matching the protobuf dispatch in a2a-sdk):
+  `SendMessage`, `GetTask`, `ListTasks`, `CancelTask`, `SendStreamingMessage`,
+  `GetExtendedAgentCard`
+- Standard Agent Card on `/.well-known/agent-card.json` (v2.0.0 release; v2.0.1 added
+  the second path)
+- Agent routing: explicit `agentId` metadata → rule-based (tags/patterns/priority YAML) → default fallback
+- Task lifecycle state machine: `SUBMITTED → WORKING → COMPLETED / FAILED / CANCELED`
+- SQLite `TaskStore` (replaces v1.x JSONL-by-peer store) with indexes on `context_id`, `state`, `updated_at`
+- Bearer token auth middleware using `hmac.compare_digest`; built-in loopback default and TLS support
+- Routing rules config (`server_v2/config.yaml`) decoupled from peer transport config
+- New Dockerfile at `Dockerfile.v2` for the a2a-sdk based gateway
+- New 23 unit tests in `tests/test_v2_core.py`; existing 35 v1.x tests still pass
+
+### 🔄 Changed
+- Required request header: `A2A-Version: 1.0` (enforced by SDK's `validate_version`)
+- Method naming convention: PascalCase gRPC-style (not REST-style)
+- `message.role` field: `ROLE_USER` / `ROLE_AGENT` (protobuf enum names, not snake_case)
+
+### ⚠️ Removed
+- `/a2a/rest/message/send` REST wrapper endpoint (replaced by standard `/a2a/jsonrpc`)
+- Custom history-store endpoints (`messages/list`, `messages/get`, `messages/peers`,
+  `messages/export`, `messages/import`) at the v2.0 server. They remain available on
+  the v1.5.x server for backward compatibility.
+
 ## [v1.5.5] - 2026-06-13
 
 ### Changed

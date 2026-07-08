@@ -38,20 +38,34 @@ When Claude Code is asked "send a message to the AgentWire gateway", it can run:
 
 ```bash
 source ~/.claude/agentwire.env
-curl -s -X POST "$AGENTWIRE_URL/a2a/rest/message/send" \
+curl -s -X POST "$AGENTWIRE_URL/a2a/jsonrpc" \
   -H "Authorization: Bearer $AGENTWIRE_TOKEN" \
+  -H "A2A-Version: 1.0" \
   -H "Content-Type: application/json" \
-  -d '{"message":{"parts":[{"type":"text","text":"Hello from Claude"}]}}'
+  -d '{
+    "jsonrpc":"2.0",
+    "id":"req-1",
+    "method":"SendMessage",
+    "params":{
+      "message":{
+        "messageId":"msg-001",
+        "role":"ROLE_USER",
+        "parts":[{"type":"text","text":"Hello from Claude"}]
+      },
+      "configuration":{"returnImmediately":false}
+    }
+  }'
 ```
 
-### 4. Read history
+### 4. List recent tasks
 
 ```bash
 source ~/.claude/agentwire.env
 curl -s -X POST "$AGENTWIRE_URL/a2a/jsonrpc" \
   -H "Authorization: Bearer $AGENTWIRE_TOKEN" \
+  -H "A2A-Version: 1.0" \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"messages/peers","params":{}}'
+  -d '{"jsonrpc":"2.0","id":"1","method":"ListTasks","params":{"pageSize":10}}'
 ```
 
 ## Using `silk-thread` (this agent) as the bridge
@@ -68,7 +82,7 @@ silk-thread agent (OpenClaw)
 Other peers (QwenPaw / Hermes / OpenClaw agents)
 ```
 
-The `silk-thread` agent can persist context across Claude Code sessions by calling `messages/list` at the start of each session.
+The `silk-thread` agent can persist context across Claude Code sessions by calling `ListTasks` at the start of each session.
 
 ## Python helper (if you prefer over bash)
 
@@ -77,15 +91,29 @@ The `silk-thread` agent can persist context across Claude Code sessions by calli
 import os, json, urllib.request
 
 def send(text: str) -> dict:
-    url = os.environ["AGENTWIRE_URL"] + "/a2a/rest/message/send"
+    url = os.environ["AGENTWIRE_URL"] + "/a2a/jsonrpc"
+    payload = {
+        "jsonrpc": "2.0",
+        "id": "req-1",
+        "method": "SendMessage",
+        "params": {
+            "message": {
+                "messageId": "msg-001",
+                "role": "ROLE_USER",
+                "parts": [{"type": "text", "text": text}],
+            },
+            "configuration": {"returnImmediately": False},
+        },
+    }
     req = urllib.request.Request(
         url,
         method="POST",
         headers={
             "Authorization": f"Bearer {os.environ['AGENTWIRE_TOKEN']}",
+            "A2A-Version": "1.0",
             "Content-Type": "application/json",
         },
-        data=json.dumps({"message": {"parts": [{"type": "text", "text": text}]}}).encode(),
+        data=json.dumps(payload).encode(),
     )
     with urllib.request.urlopen(req) as r:
         return json.loads(r.read())

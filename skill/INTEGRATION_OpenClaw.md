@@ -83,16 +83,26 @@ Use the standard A2A protocol surface. The plugin exposes the same endpoints the
 import axios from 'axios';
 
 const response = await axios.post(
-  'http://localhost:18800/a2a/rest/message/send',
+  'http://localhost:18800/a2a/jsonrpc',
   {
-    contextId: 'ctx-001',
-    message: {
-      messageId: crypto.randomUUID(),
-      role: 'user',
-      parts: [{ type: 'text', text: 'Hello from OpenClaw' }],
+    jsonrpc: '2.0',
+    id: 'req-1',
+    method: 'SendMessage',
+    params: {
+      message: {
+        messageId: crypto.randomUUID(),
+        role: 'ROLE_USER',
+        parts: [{ type: 'text', text: 'Hello from OpenClaw' }],
+      },
+      configuration: { returnImmediately: false },
     },
   },
-  { headers: { Authorization: `Bearer ${process.env.AGENTWIRE_TOKEN}` } }
+  {
+    headers: {
+      Authorization: `Bearer ${process.env.AGENTWIRE_TOKEN}`,
+      'A2A-Version': '1.0',
+    },
+  }
 );
 
 console.log(response.data);

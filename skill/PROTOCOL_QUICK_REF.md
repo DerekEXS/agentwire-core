@@ -1,14 +1,16 @@
-# AgentWire A2A v1.0.1 — Protocol Quick Reference (v1.5.5)
+# AgentWire A2A v1.0 — Protocol Quick Reference (v2.0.1)
 
 > Compact reference for AgentWire's JSON-RPC and HTTP surface.
 > For full context, see [SKILL.md](SKILL.md).
 
 ## A2A Protocol Version
 
-- **AgentWire implements**: A2A **v1.0.1** (per <https://a2a-protocol.org/latest/specification/>)
+- **AgentWire implements**: A2A **v1.0** via official [a2a-sdk](https://pypi.org/project/a2a-sdk/) v1.1.0+ (per <https://a2a-protocol.org/latest/specification/>)
 - **JSON-RPC transport**: 2.0
 - **Content type**: `application/json`
 - **Default port**: `18800`
+- **Required header**: `A2A-Version: 1.0`
+- **Method naming**: PascalCase gRPC-style (`SendMessage`, not `message/send`)
 
 ## Authentication
 
@@ -33,77 +35,97 @@ Startup token-health diagnostics (v1.4.8) warn on UTF-8 BOM, CRLF line endings, 
 
 | Method | Path | Auth | Auth Since | Purpose |
 |--------|------|------|------------|---------|
-| GET | `/.well-known/agent.json` | None | — | Agent Card discovery |
+| GET | `/.well-known/agent.json` | None | — | Agent Card discovery (primary, v2.0.1+) |
+| GET | `/.well-known/agent-card.json` | None | — | Agent Card discovery (SDK compat path, identical content) |
 | GET | `/health` | None | — | Liveness probe |
 | GET | `/a2a/metrics` | Bearer | v1.5.2 | Task counters |
-| POST | `/a2a/jsonrpc` | Bearer | v1.0 | JSON-RPC 2.0 endpoint |
-| POST | `/a2a/rest/message/send` | Bearer | v1.0 | REST wrapper |
+| POST | `/a2a/jsonrpc` | Bearer | v1.0 | JSON-RPC 2.0 endpoint (all standard A2A methods) |
 | GET | `/redact/patterns` | Bearer | v1.4.3 | Shared redaction regex catalog |
 
-## JSON-RPC Methods
+## JSON-RPC Methods (v2.0 standard)
 
-### `message/send`
+> **v2.0 breaking change**: method names are **PascalCase gRPC-style** matching the official a2a-sdk.
+> Required request header: `A2A-Version: 1.0`. The legacy `message/send`, `tasks/get`, `tasks/list`,
+> `tasks/cancel`, `tasks/subscribe` REST-style names are **no longer used** in CORE v2.0+.
+
+### `SendMessage`
 
 **Request**:
 ```json
 {
-  "jsonrpc": "2.0", "id": "req-1", "method": "message/send",
+  "jsonrpc": "2.0", "id": "req-1", "method": "SendMessage",
   "params": {
-    "contextId": "ctx-abc",
     "message": {
-      "messageId": "msg-001", "role": "user",
+      "messageId": "msg-001",
+      "role": "ROLE_USER",
+      "contextId": "ctx-abc",
       "parts": [{"type": "text", "text": "Hello, agent"}]
-    }
+    },
+    "configuration": {"returnImmediately": false}
   }
 }
 ```
 
-**Response**:
+**Response** (Task object):
 ```json
 {
   "jsonrpc": "2.0", "id": "req-1",
   "result": {
-    "kind": "task", "id": "task-uuid", "contextId": "ctx-abc",
-    "status": {"state": "completed"},
-    "message": {
-      "messageId": "msg-uuid", "role": "agent",
-      "parts": [{"type": "text", "text": "AgentWire 回复: 消息已接收"}]
+    "task": {
+      "id": "task-uuid",
+      "contextId": "ctx-abc",
+      "status": {
+        "state": "TASK_STATE_COMPLETED",
+        "message": {
+          "messageId": "msg-uuid",
+          "role": "ROLE_AGENT",
+          "parts": [{"type": "text", "text": "AgentWire reply: message received"}]
+        },
+        "timestamp": "2026-07-07T..."
+      }
     }
   }
 }
 ```
 
-> v1.5.1: Reply no longer echoes the sender's text; message content is never logged in plaintext.
+Lifecycle: `TASK_STATE_SUBMITTED` → `TASK_STATE_WORKING` → `TASK_STATE_COMPLETED` / `_FAILED` / `_CANCELED`.
 
-### `tasks/get`
-
-```json
-{"jsonrpc": "2.0", "id": "req-2", "method": "tasks/get", "params": {"taskId": "task-uuid"}}
-```
-
-### `tasks/list`
+### `GetTask`
 
 ```json
-{"jsonrpc": "2.0", "id": "req-3", "method": "tasks/list", "params": {}}
+{"jsonrpc": "2.0", "id": "req-2", "method": "GetTask", "params": {"id": "task-uuid"}}
 ```
 
-### `tasks/cancel`
+### `ListTasks`
 
 ```json
-{"jsonrpc": "2.0", "id": "req-4", "method": "tasks/cancel", "params": {"taskId": "task-uuid"}}
+{"jsonrpc": "2.0", "id": "req-3", "method": "ListTasks", "params": {"pageSize": 20}}
 ```
 
-### `tasks/subscribe` (reserved)
+### `CancelTask`
 
 ```json
-{"jsonrpc": "2.0", "id": "req-5", "method": "tasks/subscribe", "params": {"taskId": "task-uuid"}}
+{"jsonrpc": "2.0", "id": "req-4", "method": "CancelTask", "params": {"id": "task-uuid"}}
 ```
 
-### `agent/getCard`
+### `SendStreamingMessage` (v2.0+)
+
+SSE-based streaming. Returns event-source stream of `TaskStatusUpdateEvent` / `TaskArtifactUpdateEvent` chunks until the task reaches a terminal state.
+
+### `GetExtendedAgentCard` (v2.0+)
 
 ```json
-{"jsonrpc": "2.0", "id": "req-6", "method": "agent/getCard", "params": {}}
+{"jsonrpc": "2.0", "id": "req-5", "method": "GetExtendedAgentCard", "params": {}}
 ```
+
+Returns the extended Agent Card with skills, capabilities, and supportedInterfaces.
+
+---
+
+### Legacy v1.x methods (kept for v1.5.x server at port 18800)
+
+The following methods are kept for **backward compatibility** with the v1.5.x server running on port 18800.
+New agents should use the standard A2A methods above.
 
 ### `messages/list`
 
@@ -207,17 +229,22 @@ Append externally-sourced messages into a peer history. Server assigns round num
 - Max text part size: 64KB (hard cap 256KB via `IMPORT_MAX_MESSAGE_SIZE`)
 - Exceeding returns JSON-RPC `-32602 Invalid params`
 
-## REST `POST /a2a/rest/message/send`
+## REST `POST /a2a/rest/message/send` (REMOVED in v2.0)
+
+The legacy REST wrapper path `/a2a/rest/message/send` is **removed** in CORE v2.0. Use the standard
+JSON-RPC endpoint with method `SendMessage`:
 
 ```http
-POST /a2a/rest/message/send HTTP/1.1
+POST /a2a/jsonrpc HTTP/1.1
 Authorization: Bearer <token>
+A2A-Version: 1.0
 Content-Type: application/json
 
-{"message": {"parts": [{"type": "text", "text": "Hello"}]}, "contextId": "ctx-1"}
+{"jsonrpc":"2.0","id":"req-1","method":"SendMessage","params":{"message":{"messageId":"msg-001","role":"ROLE_USER","parts":[{"type":"text","text":"Hello"}]}}}
 ```
 
-Response is the same `result` object from JSON-RPC, returned directly.
+The CORE v1.5.x server still exposes `/a2a/rest/message/send` for backward compatibility if you keep
+agents pinned to the v1.5.x image.
 
 ## History configuration
 
@@ -254,12 +281,19 @@ history:
 
 ```json
 {
-  "protocolVersion": "1.0.1",
-  "name": "AgentWire", "version": "1.5.5",
-  "description": "AgentWire A2A v1.0.1 Service",
+  "name": "AgentWire Gateway",
+  "description": "AgentWire Gateway v2.0 — A2A v1.0 compliant message router",
+  "version": "2.0.1",
+  "supportedInterfaces": [
+    {"url": "http://127.0.0.1:18800/a2a/jsonrpc", "protocolBinding": "jsonrpc", "protocolVersion": "1.0"}
+  ],
+  "provider": {"url": "https://github.com/DerekEXS/agentwire-core", "organization": "AgentWire"},
   "capabilities": {"streaming": true, "pushNotifications": false, "extendedAgentCard": false},
-  "skills": [],
-  "defaultInputModes": ["text"], "defaultOutputModes": ["text"]
+  "defaultInputModes": ["text"],
+  "defaultOutputModes": ["text"],
+  "skills": [
+    {"id": "message_routing", "name": "Message Routing", "description": "Agent routing via tags / patterns / explicit agentId"}
+  ]
 }
 ```
 
@@ -297,20 +331,56 @@ curl -s http://127.0.0.1:18800/.well-known/agent.json | jq
 ### Step 2: send a message
 
 ```bash
-curl -s -X POST http://127.0.0.1:18800/a2a/rest/message/send \
+curl -s -X POST http://127.0.0.1:18800/a2a/jsonrpc \
   -H "Authorization: Bearer demo-token-xyz" \
+  -H "A2A-Version: 1.0" \
   -H "Content-Type: application/json" \
-  -d '{"contextId":"demo-ctx-001","message":{"parts":[{"type":"text","text":"Hello, world!"}]}}' | jq
+  -d '{
+    "jsonrpc":"2.0",
+    "id":"req-1",
+    "method":"SendMessage",
+    "params":{
+      "message":{
+        "messageId":"msg-001",
+        "role":"ROLE_USER",
+        "contextId":"demo-ctx-001",
+        "parts":[{"type":"text","text":"Hello, world!"}]
+      },
+      "configuration":{"returnImmediately":false}
+    }
+  }' | jq
 ```
 
-### Step 3: check metrics (requires auth since v1.5.2)
+### Step 3: check task status (GetTask)
+
+```bash
+curl -s -X POST http://127.0.0.1:18800/a2a/jsonrpc \
+  -H "Authorization: Bearer demo-token-xyz" \
+  -H "A2A-Version: 1.0" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"req-2","method":"GetTask","params":{"id":"task-uuid"}}' | jq
+```
+
+### Step 4: check metrics (requires auth since v1.5.2)
 
 ```bash
 curl -s -H "Authorization: Bearer demo-token-xyz" \
   http://127.0.0.1:18800/a2a/metrics | jq
 ```
 
-### Step 4: import external history
+### Step 5: list recent tasks (ListTasks)
+
+```bash
+curl -s -X POST http://127.0.0.1:18800/a2a/jsonrpc \
+  -H "Authorization: Bearer demo-token-xyz" \
+  -H "A2A-Version: 1.0" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"req-3","method":"ListTasks","params":{"pageSize":5}}' | jq
+```
+
+### Step 6 (legacy v1.5.x server): import external history
+
+Only on the legacy v1.5.x server:
 
 ```bash
 curl -s -X POST http://127.0.0.1:18800/a2a/jsonrpc \
@@ -325,25 +395,7 @@ curl -s -X POST http://127.0.0.1:18800/a2a/jsonrpc \
   }' | jq
 ```
 
-### Step 5: list all peers
-
-```bash
-curl -s -X POST http://127.0.0.1:18800/a2a/jsonrpc \
-  -H "Authorization: Bearer demo-token-xyz" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":"2","method":"messages/peers","params":{}}' | jq
-```
-
-### Step 6: pull paginated history
-
-```bash
-curl -s -X POST http://127.0.0.1:18800/a2a/jsonrpc \
-  -H "Authorization: Bearer demo-token-xyz" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":"3","method":"messages/list","params":{"limit":5}}' | jq
-```
-
-### Step 7: export paginated
+### Step 7 (legacy v1.5.x server): export paginated
 
 ```bash
 curl -s -X POST http://127.0.0.1:18800/a2a/jsonrpc \
