@@ -28,7 +28,7 @@ class TestAgentCard:
     def test_card_name_and_version(self):
         card = build_agent_card()
         assert card.name == "AgentWire Gateway"
-        assert card.version == "2.0.2"
+        assert card.version == "2.0.4"
 
     def test_card_has_jsonrpc_interface(self):
         card = build_agent_card()
@@ -99,6 +99,51 @@ class TestAgentRouter:
         result = router.route("project: my-app scenes: login")
         assert result.agent_id == "script-receiver"
         assert result.rule_name == "script"
+
+    def test_metadata_workflow_pointer(self):
+        """v2.0.4: has_workflow_pointer rule takes precedence over explicit agentId."""
+        router = AgentRouter()
+        router._rules = [
+            RoutingRule(name="cue_workflow", match_has_workflow_pointer=True,
+                        target_peer="cue-worker", target_agent_id="main", priority=20),
+        ]
+        result = router.route(
+            text="",
+            metadata={"agentId": "main", "workflow_pointer": {"step": "review"}},
+        )
+        assert result.peer == "cue-worker"
+        assert result.agent_id == "main"
+        assert result.rule_name == "cue_workflow"
+
+    def test_metadata_tags(self):
+        """v2.0.4: metadata_tags rule matches tag values in metadata dict."""
+        router = AgentRouter()
+        router._rules = [
+            RoutingRule(name="cue_script", match_tags_in_metadata=["project:", "scenes:"],
+                        target_peer="cue-worker", target_agent_id="script-receiver", priority=18),
+        ]
+        result = router.route(
+            text="",
+            metadata={"intent": "project: script delivery", "workflow": "scenes: login"},
+        )
+        assert result.peer == "cue-worker"
+        assert result.rule_name == "cue_script"
+
+    def test_metadata_rules_override_explicit_agent_id(self):
+        """v2.0.4: metadata rules fire before explicit agentId check."""
+        router = AgentRouter()
+        router._rules = [
+            RoutingRule(name="cue_workflow", match_has_workflow_pointer=True,
+                        target_peer="cue-worker", target_agent_id="main", priority=20),
+        ]
+        result = router.route(
+            text="urgent alert from main",
+            metadata={"agentId": "main", "workflow_pointer": {"step": "alert"}},
+        )
+        # Must route to cue-worker via rule, NOT via explicit agentId=main
+        assert result.peer == "cue-worker"
+        assert result.agent_id == "main"
+        assert result.rule_name == "cue_workflow"
 
     def test_priority_order(self):
         router = AgentRouter()

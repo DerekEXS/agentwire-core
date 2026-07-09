@@ -5,6 +5,24 @@ All notable changes to AgentWire-Core are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v2.0.4] - 2026-07-09
+
+### 🐛 Bug Fixes
+- **Routing priority (critical)**: `AgentRouter.route()` now evaluates metadata-based
+  routing rules BEFORE the explicit `agentId` check. Previously, messages with
+  `agentId=main` always routed to OpenClaw regardless of tag/pattern rules,
+  breaking CORE→CUE dispatch for `script-receiver` and `owner-alert` triggers.
+- New routing rule priority: **metadata rules > text rules > explicit agentId > default**
+- New `_rule_matches_metadata()`: supports `context_id` exact match,
+  `has_workflow_pointer` boolean, and `metadata_tags` value matching.
+- `docker/core-config.yaml` adds two v2.0.4 rules:
+  - `cue_workflow` (priority 20): routes any message with `workflow_pointer` to cue-worker
+  - `cue_script_metadata` (priority 18): routes messages with `project:`/`scenes:` in metadata to cue-worker
+
+### 🧪 Tests
+- 3 new unit tests: `test_metadata_workflow_pointer`, `test_metadata_tags`,
+  `test_metadata_rules_override_explicit_agent_id`
+
 ## [v2.0.3] - 2026-07-08
 
 ### 🛡️ Security — Information Leak Sanitization

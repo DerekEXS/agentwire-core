@@ -13,10 +13,30 @@ default_peer: "openclaw"
 cors_origins: []
 
 # ------------------------------------------------------------------
-# Routing Rules — Priority: explicit agentId > rule-based > default
+# Routing Rules — Priority: metadata rules > text rules > explicit agentId > default
+# v2.0.4: metadata-based routing takes precedence so workflow-targeted
+# messages reach CUE even when the sender set agentId=main.
 # ------------------------------------------------------------------
 routing_rules:
-  # Script receiver: messages with project: and scenes:
+  # v2.0.4: Workflow-pointer messages route to CUE (priority 20)
+  - name: "cue_workflow"
+    match:
+      has_workflow_pointer: true
+    target:
+      peer: "cue-worker"
+      agent_id: "main"
+    priority: 20
+
+  # v2.0.4: Script keywords in metadata values route to CUE (priority 18)
+  - name: "cue_script_metadata"
+    match:
+      metadata_tags: ["project:", "scenes:"]
+    target:
+      peer: "cue-worker"
+      agent_id: "script-receiver"
+    priority: 18
+
+  # Script receiver: messages with project: and scenes: in text
   - name: "script_receiver"
     match:
       tags: ["project:", "scenes:"]
@@ -25,7 +45,7 @@ routing_rules:
       agent_id: "script-receiver"
     priority: 10
 
-  # Owner alerts
+  # Owner alerts: messages with alert: or owner: in text
   - name: "owner_alert"
     match:
       tags: ["alert:", "owner:"]
