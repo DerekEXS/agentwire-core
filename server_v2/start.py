@@ -38,6 +38,7 @@ from a2a.server.routes.jsonrpc_routes import create_jsonrpc_routes
 from .agent_card import build_agent_card
 from .agent_router import AgentRouter
 from .gateway_executor import GatewayExecutor
+from . import __version__
 from .task_store import SqliteTaskStore
 
 logging.basicConfig(
@@ -101,7 +102,7 @@ class BearerTokenMiddleware:
 # ---------------------------------------------------------------------------
 
 async def health_endpoint(request: Request) -> Response:
-    return JSONResponse({"status": "ok", "service": "agentwire-core", "version": "2.0.9"})
+    return JSONResponse({"status": "ok", "service": "agentwire-core", "version": __version__})
 
 
 async def root_endpoint(request: Request) -> Response:
@@ -249,7 +250,7 @@ def main():
     # Agent Card
     agent_card = build_agent_card(
         name=cfg.get("name", "AgentWire Gateway"),
-        version="2.0.9",
+        version=__version__,
         listen_host=host,
         listen_port=port,
     )

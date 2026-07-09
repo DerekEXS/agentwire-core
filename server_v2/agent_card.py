@@ -1,5 +1,7 @@
 """CORE v2.0 Agent Card — A2A protocol discovery endpoint."""
 
+from . import __version__
+
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
@@ -11,7 +13,7 @@ from a2a.types import (
 
 def build_agent_card(
     name: str = "AgentWire Gateway",
-    version: str = "2.0.8",
+    version: str = __version__,
     listen_host: str = "127.0.0.1",
     listen_port: int = 18800,
 ) -> AgentCard:
