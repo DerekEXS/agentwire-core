@@ -15,6 +15,13 @@ RUN apt-get update \
 COPY server_v2/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
+# v2.0.6: Patch a2a-sdk version_validator to accept v0.3 clients.
+# The SDK rejects requests where A2A-Version major != expected major.
+# v0.3 and v1.0 share the same JSON-RPC wire format, so we accept
+# the cross-version request and respond with v1.0-compliant output.
+RUN sed -i 's/return actual_v.major == expected_v.major/if actual_v.major == 0 and expected_v.major == 1: return True; return actual_v.major == expected_v.major/' \
+    "$(python3 -c "import a2a.utils.version_validator; print(a2a.utils.version_validator.__file__)")"
+
 # Both v1 (backup) and v2 (active) server code
 COPY server/ /app/server/
 COPY server_v2/ /app/server_v2/
