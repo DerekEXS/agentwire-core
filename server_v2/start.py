@@ -93,7 +93,7 @@ class BearerTokenMiddleware:
 
     async def _unauthorized(self, send, detail: str):
         body = JSONResponse({"error": detail}, status_code=401)
-        await body(scope=None, receive=None, send=send)  # type: ignore
+        await body(scope={"type": "http"}, receive=None, send=send)
 
 
 # ---------------------------------------------------------------------------
