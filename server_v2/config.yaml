@@ -63,12 +63,26 @@ routing_rules:
 
 # ------------------------------------------------------------------
 # Peer Registry — known A2A peers for dispatch
+# v2.0.6+: a2a-token and cue-admin-token are mounted as Docker secrets
 # ------------------------------------------------------------------
 peers:
+  # v2.0.6: OpenClaw A2A adapter (replaces 18789 direct dispatch which 404s)
+  #   - Listens on 18802 with full A2A v1.0 JSON-RPC support
+  #   - Wraps OpenClaw /tools/invoke on 18789 internally
+  #   - Token matches a2a-token.txt (same secret used for incoming A2A auth)
   openclaw:
-    url: "http://127.0.0.1:18789"
-    description: "OpenClaw Gateway - local agent host"
+    url: "http://127.0.0.1:18802"
+    description: "OpenClaw A2A Gateway (adapts 18789 to A2A v1.0)"
+    token_file: "/run/secrets/a2a-token.txt"
+
+  # v2.0.5: main agent alias (same endpoint as openclaw)
+  main:
+    url: "http://127.0.0.1:18802"
+    description: "Main agent — OpenClaw A2A Gateway"
+    token_file: "/run/secrets/a2a-token.txt"
 
   cue-worker:
     url: "http://127.0.0.1:18801"
     description: "AgentWire CUE workflow engine"
+    # v2.0.6 fix: token_file was missing, causing 401 on every dispatch
+    token_file: "/run/secrets/cue-admin-token.txt"

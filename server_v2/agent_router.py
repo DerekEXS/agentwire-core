@@ -168,21 +168,28 @@ class AgentRouter:
         )
 
     def _rule_matches_metadata(self, rule: RoutingRule, metadata: dict | None) -> bool:
-        """v2.0.4: Check if a routing rule's metadata conditions match."""
+        """v2.0.4: Check if a routing rule's metadata conditions match.
+
+        Returns True only if ALL specified conditions are satisfied.
+        Returns False if any condition fails, or if the rule has no conditions
+        (metadata rules should not match when they have nothing to check).
+        """
         if not isinstance(metadata, dict):
             return False
+        # Assume pass; set to False if any condition fails
+        passed = True
         # context_id exact match
         if rule.match_context_id:
             ctx = str(metadata.get("context_id") or metadata.get("contextId") or "")
             if ctx != rule.match_context_id:
-                return False
+                passed = False
         # has_workflow_pointer
         if rule.match_has_workflow_pointer:
             if not metadata.get("workflow_pointer"):
-                return False
+                passed = False
         # metadata_tags: tag values checked against metadata dict values (string only)
         if rule.match_tags_in_metadata:
             meta_vals = [str(v).lower() for v in metadata.values() if isinstance(v, str)]
             if not any(tag.lower() in val for tag in rule.match_tags_in_metadata for val in meta_vals):
-                return False
-        return True
+                passed = False
+        return passed

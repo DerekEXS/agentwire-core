@@ -108,7 +108,7 @@ class SqliteTaskStore(A2ATaskStore):
             if params.context_id:
                 clauses.append("context_id = ?")
                 values.append(params.context_id)
-            if params.HasField("status") and params.status != TaskState.TASK_STATE_UNSPECIFIED:
+            if params.status and params.status != TaskState.TASK_STATE_UNSPECIFIED:
                 clauses.append("state = ?")
                 values.append(TaskState.Name(params.status))
             where = " AND ".join(clauses)

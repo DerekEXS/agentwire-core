@@ -256,7 +256,7 @@ class GatewayExecutor(AgentExecutor):
     ) -> str:
         """Dispatch to a remote A2A peer via standard SendMessage."""
         # v2.0.2: use per-peer token from resolved config
-        peer_info = self._peers.get(agent_id, {})  # agent_id used as peer name key here
+        peer_info = self._peers.get(peer, {})  # peer is the config key, not agent_id
         peer_token = peer_info.get("resolved_token", self._openclaw_token)
 
         # Use metadata to pass agentId since A2A standard doesn't have agentId in Message
