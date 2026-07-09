@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 # Both v1 (backup) and v2 (active) server code
 COPY server/ /app/server/
 COPY server_v2/ /app/server_v2/
-COPY docker/core-config.yaml /app/server_v2/config.yaml
+COPY docker/core-config.yaml /app/server/config.yaml
 
 RUN groupadd -r agentwire \
     && useradd -r -g agentwire -m -d /home/agentwire agentwire \

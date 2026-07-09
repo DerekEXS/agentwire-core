@@ -92,12 +92,17 @@ peers:
     url: "http://127.0.0.1:18789"
     description: "OpenClaw Gateway - local agent host"
 
+  # v2.0.5: main agent alias — same endpoint as openclaw (OpenClaw gateway main agent)
+  main:
+    url: "http://127.0.0.1:18789"
+    description: "Main agent — OpenClaw gateway main agent"
+
   cue-worker:
     url: "http://127.0.0.1:18801"
     description: "AgentWire CUE workflow engine"
 
   # v2.0.2: remote peer — fill in actual URL and token_file path in deployment
-  # Replace <remote-peer-url> with your peer's actual A2A endpoint
+  # Replace <remote-peer-url> with your peer actual A2A endpoint
   remote-peer-a:
     url: "<remote-peer-url>:18800"
     description: "Remote A2A peer — configure URL and token_file for deployment"
