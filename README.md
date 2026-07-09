@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org)
 [![Node](https://img.shields.io/badge/node-18%2B-green)](https://nodejs.org)
-[![Status](https://img.shields.io/badge/status-v2.0.1-green)](https://github.com/DerekEXS/agentwire-core/releases/tag/v2.0.1)
+[![Status](https://img.shields.io/badge/status-v2.0.8-green)](https://github.com/DerekEXS/agentwire-core/releases/tag/v2.0.8)
 
 ---
 
@@ -293,7 +293,7 @@ If you are authoring a YAML statechart plugin for an AgentWire-compatible host, 
 
 ### Docker (recommended)
 
-The CORE image (`agentwire-core:v2.0.1`) is published alongside CUE in the
+The CORE image (`agentwire-core:v2.0.8`) is published alongside CUE in the
 CUE repository's `docker-compose.yml`. The Compose stack brings up CORE on
 `127.0.0.1:18800` and CUE on `127.0.0.1:18801` + `127.0.0.1:19000`, both with
 loopback-only host publishes and shared token secrets.
