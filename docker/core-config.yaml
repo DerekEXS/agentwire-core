@@ -102,7 +102,7 @@ peers:
     description: "AgentWire CUE workflow engine"
 
   # v2.0.2: remote peer — fill in actual URL and token_file path in deployment
-  # Replace <remote-peer-url> with your peer actual A2A endpoint
+  # Replace <remote-peer-url> with your peer's actual A2A endpoint
   remote-peer-a:
     url: "<remote-peer-url>:18800"
     description: "Remote A2A peer — configure URL and token_file for deployment"

@@ -1,7 +1,7 @@
 services:
   agentwire-core:
     build: .
-    image: agentwire-core:v1.5.5
+    image: agentwire-core:v2.0.4
     ports:
       - "127.0.0.1:${CORE_PORT:-18800}:18800"
     volumes:
