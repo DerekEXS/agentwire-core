@@ -176,7 +176,14 @@ class AgentRouter:
         """
         if not isinstance(metadata, dict):
             return False
-        # Assume pass; set to False if any condition fails
+        # Check if any metadata conditions are configured
+        has_conditions = bool(
+            rule.match_context_id
+            or rule.match_has_workflow_pointer
+            or rule.match_tags_in_metadata
+        )
+        if not has_conditions:
+            return False  # No metadata conditions → this rule doesn't match by metadata
         passed = True
         # context_id exact match
         if rule.match_context_id:

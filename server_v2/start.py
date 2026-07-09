@@ -101,7 +101,7 @@ class BearerTokenMiddleware:
 # ---------------------------------------------------------------------------
 
 async def health_endpoint(request: Request) -> Response:
-    return JSONResponse({"status": "ok", "service": "agentwire-core", "version": "2.0.7"})
+    return JSONResponse({"status": "ok", "service": "agentwire-core", "version": "2.0.8"})
 
 
 async def root_endpoint(request: Request) -> Response:
@@ -216,8 +216,8 @@ def main():
     )
     cfg = load_gateway_config(config_path)
 
-    host = args.host or cfg["listen_host"]
-    port = args.port or cfg["listen_port"]
+    host = args.host or os.environ.get("CORE_LISTEN_HOST", "") or cfg["listen_host"]
+    port = args.port or int(os.environ.get("CORE_LISTEN_PORT", "") or 0) or cfg["listen_port"]
 
     # Tokens
     token_files = args.token_files or []
@@ -249,7 +249,7 @@ def main():
     # Agent Card
     agent_card = build_agent_card(
         name=cfg.get("name", "AgentWire Gateway"),
-        version="2.0.7",
+        version="2.0.8",
         listen_host=host,
         listen_port=port,
     )

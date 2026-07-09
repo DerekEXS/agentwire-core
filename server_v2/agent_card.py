@@ -11,7 +11,7 @@ from a2a.types import (
 
 def build_agent_card(
     name: str = "AgentWire Gateway",
-    version: str = "2.0.7",
+    version: str = "2.0.8",
     listen_host: str = "127.0.0.1",
     listen_port: int = 18800,
 ) -> AgentCard:

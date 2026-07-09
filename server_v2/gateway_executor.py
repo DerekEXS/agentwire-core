@@ -191,7 +191,7 @@ class GatewayExecutor(AgentExecutor):
         peer_info = self._peers.get(peer, {})
         peer_url = peer_info.get("url", "")
         if peer_url:
-            return await self._dispatch_via_a2a(peer_url, agent_id, text, metadata, context_id, task_id)
+            return await self._dispatch_via_a2a(peer_url, agent_id, text, metadata, context_id, task_id, peer)
 
         # For unknown peers, return routing info as response (passthrough for CUE)
         log.warning("no dispatch target for peer=%s agent=%s — returning passthrough", peer, agent_id)
@@ -253,6 +253,7 @@ class GatewayExecutor(AgentExecutor):
         metadata: dict | None,
         context_id: str,
         task_id: str,
+        peer: str = "",
     ) -> str:
         """Dispatch to a remote A2A peer via standard SendMessage."""
         # v2.0.2: use per-peer token from resolved config
