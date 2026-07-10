@@ -4,7 +4,7 @@
 
 ## Symptom
 
-External agents (e.g., Pawly via Tailscale IP `100.70.166.21:18880`) get `Connection timed out` or `Connection reset` while:
+External agents (e.g., Pawly via Tailscale IP `<tailscale-ip>:18880`) get `Connection timed out` or `Connection reset` while:
 - `curl http://127.0.0.1:18880/health` on the WSL2 host works fine
 - CORE container is running and healthy
 - portproxy rule appears to exist (`netsh interface portproxy show v4tov4`)
@@ -65,7 +65,7 @@ wsl -d kali-linux hostname -I
 curl http://127.0.0.1:18880/health
 
 # Test Tailscale path
-curl http://100.70.166.21:18880/health
+curl http://<tailscale-ip>:18880/health
 
 # Check scheduled tasks
 schtasks /Query /TN "AgentWire-PortProxyHealthCheck"
