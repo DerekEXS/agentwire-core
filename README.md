@@ -287,13 +287,21 @@ If you are authoring a YAML statechart plugin for an AgentWire-compatible host, 
 - **Internal errors** are not leaked to clients (logged server-side, generic 500 returned).
 - **Workflow-hook allowlist** — external binaries invoked by the workflow hook are restricted by `WORKFLOW_HOOK_CONFIG.allowed_commands` (v1.5.2).
 
+## Known Limitations
+
+### WSL2 Networking (AI-CLAW)
+
+When running CORE in Docker with `network_mode: host` on WSL2, external access via Tailscale requires Windows `portproxy`. See [docs/PORTPROXY-FIX.md](docs/PORTPROXY-FIX.md) for troubleshooting.
+
+For agent compatibility notes (role format, parts structure), see [docs/AGENT-COMPATIBILITY.md](docs/AGENT-COMPATIBILITY.md).
+
 ## Deployment
 
 > ⚠️ **HTTP-not-HTTPS**: AgentWire CORE uses plain HTTP unless `--tls-cert` + `--tls-key` are supplied. The `Authorization: Bearer <token>` header is therefore transmitted **in cleartext** on the wire unless TLS is enabled.
 
 ### Docker (recommended)
 
-The CORE image (`agentwire-core:v2.0.8`) is published alongside CUE in the
+The CORE image (`agentwire-core:v2.1.0`) is published alongside CUE in the
 CUE repository's `docker-compose.yml`. The Compose stack brings up CORE on
 `127.0.0.1:18800` and CUE on `127.0.0.1:18801` + `127.0.0.1:19000`, both with
 loopback-only host publishes and shared token secrets.

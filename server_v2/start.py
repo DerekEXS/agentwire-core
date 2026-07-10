@@ -49,6 +49,42 @@ log = logging.getLogger("agentwire")
 
 
 # ---------------------------------------------------------------------------
+# Parts normalization — A2A protocol compat layer
+# ---------------------------------------------------------------------------
+
+def _normalize_message(msg: dict) -> dict:
+    """Normalize a message dict for A2A protocol compatibility.
+
+    Handles known对外 client quirks:
+    1. Role as string ('ROLE_AGENT', 'agent') instead of int enum.
+       Convert string roles to integer values.
+    2. message_id missing — required by SendMessageRequest protobuf.
+       Auto-generate one if absent.
+    """
+    if not isinstance(msg, dict):
+        return msg
+    msg = dict(msg)
+    # Normalize role: string → int enum
+    role = msg.get("role")
+    if isinstance(role, str):
+        role_map = {
+            "ROLE_UNSPECIFIED": 0, "UNSPECIFIED": 0,
+            "ROLE_USER": 1, "USER": 1,
+            "ROLE_AGENT": 2, "AGENT": 2,
+            # Allow lowercase variants
+            "agent": 2, "user": 1, "unspecified": 0,
+        }
+        normalized_role = role_map.get(role)
+        if normalized_role is not None:
+            msg["role"] = normalized_role
+    # Auto-generate message_id if missing (required by protobuf)
+    if "message_id" not in msg:
+        import uuid
+        msg["message_id"] = str(uuid.uuid4())
+    return msg
+
+
+# ---------------------------------------------------------------------------
 # Bearer token auth middleware
 # ---------------------------------------------------------------------------
 
@@ -265,15 +301,41 @@ def main():
 
     # Routes
     card_routes = create_agent_card_routes(agent_card)
-    jsonrpc_routes = create_jsonrpc_routes(
+
+    # v2.1.0: create dispatcher directly so we can wrap the route with normalization
+    from a2a.server.routes.jsonrpc_dispatcher import JsonRpcDispatcher
+    dispatcher = JsonRpcDispatcher(
         request_handler=request_handler,
-        rpc_url="/a2a/jsonrpc",
         context_builder=DefaultServerCallContextBuilder(),
     )
 
-    # v2.0.1: expose both agent card paths (like CUE v2.0)
-    # /.well-known/agent.json = standard A2A path (primary)
-    # /.well-known/agent-card.json = compatibility path (from SDK)
+    # v2.1.0: custom JSON-RPC route with parts normalization compat layer
+    from starlette.requests import Request
+    import json
+
+    async def _jsonrpc_normalized(request: Request) -> Response:
+        """JSON-RPC route with message normalization pre-processing."""
+        body = await request.body()
+        rpc_call = json.loads(body)
+        # Normalize message (role string→int, leave parts as-is)
+        params = rpc_call.get("params", {})
+        if isinstance(params, dict) and "message" in params:
+            params["message"] = _normalize_message(params["message"])
+        # Build a new request with normalized body
+        normalized_body = json.dumps(rpc_call).encode()
+        scope = dict(request.scope)
+        # Create a new Request with the normalized body
+        new_request = Request(scope)
+        # Cache the normalized body so stream()/json() use it instead of calling receive()
+        new_request._body = normalized_body  # type: ignore[attr-defined]
+        # Delegate to the SDK's dispatcher (async)
+        return await dispatcher.handle_requests(new_request)
+
+    jsonrpc_routes = [
+        Route("/a2a/jsonrpc", _jsonrpc_normalized, methods=["POST"]),
+    ]
+
+    # Agent card alt route
     from a2a.server.request_handlers.response_helpers import agent_card_to_dict
     async def _agent_card_alt(request: Request) -> Response:
         return JSONResponse(agent_card_to_dict(agent_card))
