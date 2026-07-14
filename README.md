@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org)
 [![Node](https://img.shields.io/badge/node-18%2B-green)](https://nodejs.org)
-[![Status](https://img.shields.io/badge/status-v2.0.8-green)](https://github.com/DerekEXS/agentwire-core/releases/tag/v2.0.8)
+[![Status](https://img.shields.io/badge/status-v2.2.0-green)](https://github.com/DerekEXS/agentwire-core/releases/tag/v2.2.0)
 
 ---
 

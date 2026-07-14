@@ -1,7 +1,10 @@
+# NOTE: This compose is for local development/testing only.
+# It uses the v1.x Dockerfile (server/). For v2.x production deployment,
+# use agentwire_cue/docker-compose.yml which references Dockerfile.v2.
 services:
   agentwire-core:
     build: .
-    image: agentwire-core:v2.0.4
+    image: agentwire-core:v2.2.0-dev
     ports:
       - "127.0.0.1:${CORE_PORT:-18800}:18800"
     volumes:

@@ -5,6 +5,62 @@ All notable changes to AgentWire-Core are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v2.2.0] - 2026-07-14
+
+### 🚀 New Features — Observability Infrastructure
+
+- **Prometheus metrics endpoint**: `GET /metrics` (no auth, Prometheus scrape format)
+- **Structured logging**: `structlog` integration with JSON renderer for production log aggregation
+- **Root endpoint update**: `GET /` now lists `/metrics` alongside existing endpoints
+
+### 📊 Metrics Exported
+
+| Metric | Type | Labels |
+|--------|------|--------|
+| `agentwire_router_hit_total` | Counter | `rule_name` |
+| `agentwire_routing_duration_seconds` | Histogram | — |
+| `a2a_dispatch_total` | Counter | `peer`, `status` |
+| `a2a_message_duration_seconds` | Histogram | `peer`, `agent_id`, `rule_name` |
+| `a2a_task_state_total` | Counter | `state` |
+
+### 📦 Dependencies
+- `+structlog>=24.1.0`
+- `+prometheus-client>=0.20.0`
+
+### 🧪 Tests
+- 5 new test classes: `TestMetricsEndpoint`, `TestRouterMetrics`, `TestExecutorMetrics`, `TestTaskStoreMetrics`
+- 31 tests total, all passing
+
+### 🔧 Instrumentation
+- `agent_router.py`: router hit counter + routing duration histogram
+- `gateway_executor.py`: dispatch counter (success/error) + message duration histogram
+- `task_store.py`: task state transition counter
+- `start.py`: `/metrics` endpoint, excluded from bearer auth
+
+---
+
+## [v2.1.0] - 2026-07-10
+
+### 🚀 New Features — Protocol Compatibility Layer
+
+- **`_normalize_message()` compat layer**: auto-converts `role` string values (`ROLE_AGENT`, `agent`, etc.) to integer enum, and auto-injects `message_id` if missing. Required by protobuf `SendMessageRequest`.
+- **Wrapped JSON-RPC route**: replaces SDK's `handle_requests` with `_jsonrpc_normalized` route that pre-processes the message before delegating to `JsonRpcDispatcher`.
+
+### 🐛 Bug Fixes
+- `_unauthorized()`: pass `scope={'type':'http'}` instead of `scope=None` to `JSONResponse.__call__()`, fixing `TypeError` when rejecting unauthenticated requests.
+- `BearerTokenMiddleware`: exclude `/.well-known/agent.json`, `/.well-known/agent-card.json`, `/health`, `/` from auth.
+
+### 📚 Documentation
+- `docs/AGENT-COMPATIBILITY.md`: documents known client quirks (role string, missing message_id) and normalization behavior
+- `docs/PORTPROXY-FIX.md`: WSL2 portproxy 1-minute heal script for Tailscale IP drift
+- README: added Known Limitations section, updated version references
+
+### 🔧 Internal
+- Dynamic version via `__version__` import (replaces hardcoded version strings)
+- `load_tokens()` / `load_gateway_config()` / `check_token_file_hygiene()` helpers
+
+---
+
 ## [v2.0.4] - 2026-07-09
 
 ### 🐛 Bug Fixes
