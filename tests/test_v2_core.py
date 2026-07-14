@@ -28,7 +28,7 @@ class TestAgentCard:
     def test_card_name_and_version(self):
         card = build_agent_card()
         assert card.name == "AgentWire Gateway"
-        assert card.version == "2.0.8"
+        assert card.version == "2.2.0"
 
     def test_card_has_jsonrpc_interface(self):
         card = build_agent_card()
@@ -297,3 +297,44 @@ class TestBearerTokenMiddleware:
             tokens=["only-token"],
         )
         assert len(middleware._tokens) == 1
+
+
+class TestMetricsEndpoint:
+    """v2.2.0: Prometheus metrics endpoint."""
+
+    def test_metrics_endpoint_exists(self):
+        from server_v2.start import metrics_endpoint
+        assert metrics_endpoint is not None
+
+    def test_metrics_export_format(self):
+        from server_v2.start import generate_latest, CONTENT_TYPE_LATEST
+        from prometheus_client import CONTENT_TYPE_LATEST as PROM_CONTENT
+        data = generate_latest()
+        assert data
+        assert CONTENT_TYPE_LATEST == PROM_CONTENT
+
+
+class TestRouterMetrics:
+    """v2.2.0: Router metrics instrumentation."""
+
+    def test_router_metrics_defined(self):
+        from server_v2.agent_router import _router_hit_total, _routing_duration
+        assert _router_hit_total is not None
+        assert _routing_duration is not None
+
+
+class TestExecutorMetrics:
+    """v2.2.0: Executor metrics instrumentation."""
+
+    def test_executor_metrics_defined(self):
+        from server_v2.gateway_executor import _dispatch_total, _message_duration
+        assert _dispatch_total is not None
+        assert _message_duration is not None
+
+
+class TestTaskStoreMetrics:
+    """v2.2.0: Task store metrics instrumentation."""
+
+    def test_task_store_metrics_defined(self):
+        from server_v2.task_store import _task_state_total
+        assert _task_state_total is not None

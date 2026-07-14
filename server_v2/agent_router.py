@@ -20,6 +20,22 @@ import yaml
 
 log = logging.getLogger("agentwire.router")
 
+# v2.2.0: Prometheus metrics
+try:
+    from prometheus_client import Counter, Histogram
+    _router_hit_total = Counter(
+        "agentwire_router_hit_total",
+        "Routing rule matches",
+        ["rule_name"]
+    )
+    _routing_duration = Histogram(
+        "agentwire_routing_duration_seconds",
+        "Time to compute routing decision"
+    )
+except ImportError:
+    _router_hit_total = None  # type: ignore
+    _routing_duration = None  # type: ignore
+
 
 @dataclass
 class RoutingRule:
@@ -109,6 +125,9 @@ class AgentRouter:
         Returns:
             RoutingResult with peer and agent_id.
         """
+        import time
+
+        start_time = time.time()
         sorted_rules = sorted(self._rules, key=lambda r: -r.priority)
         text_lower = text.lower() if text else ""
 
@@ -116,6 +135,10 @@ class AgentRouter:
         for rule in sorted_rules:
             if self._rule_matches_metadata(rule, metadata):
                 log.info("routing via rule '%s' (metadata match)", rule.name)
+                if _router_hit_total:
+                    _router_hit_total.labels(rule_name=rule.name).inc()
+                if _routing_duration:
+                    _routing_duration.observe(time.time() - start_time)
                 return RoutingResult(
                     peer=rule.target_peer,
                     agent_id=rule.target_agent_id,
@@ -128,6 +151,10 @@ class AgentRouter:
                 try:
                     if re.search(rule.pattern, text, re.IGNORECASE):
                         log.info("routing via rule '%s' (pattern match)", rule.name)
+                        if _router_hit_total:
+                            _router_hit_total.labels(rule_name=rule.name).inc()
+                        if _routing_duration:
+                            _routing_duration.observe(time.time() - start_time)
                         return RoutingResult(
                             peer=rule.target_peer,
                             agent_id=rule.target_agent_id,
@@ -138,6 +165,10 @@ class AgentRouter:
             if rule.tags:
                 if any(tag.lower() in text_lower for tag in rule.tags):
                     log.info("routing via rule '%s' (tag match: %s)", rule.name, rule.tags)
+                    if _router_hit_total:
+                        _router_hit_total.labels(rule_name=rule.name).inc()
+                    if _routing_duration:
+                        _routing_duration.observe(time.time() - start_time)
                     return RoutingResult(
                         peer=rule.target_peer,
                         agent_id=rule.target_agent_id,
@@ -153,6 +184,10 @@ class AgentRouter:
             )
             if agent_id:
                 log.info("routing via explicit agentId: %s", agent_id)
+                if _router_hit_total:
+                    _router_hit_total.labels(rule_name="explicit_agent_id").inc()
+                if _routing_duration:
+                    _routing_duration.observe(time.time() - start_time)
                 return RoutingResult(
                     peer=metadata.get("peer", self.default_peer),
                     agent_id=str(agent_id),
@@ -161,6 +196,10 @@ class AgentRouter:
 
         # Priority 4: default agent
         log.info("routing via default agent: %s@%s", self.default_agent_id, self.default_peer)
+        if _router_hit_total:
+            _router_hit_total.labels(rule_name="default").inc()
+        if _routing_duration:
+            _routing_duration.observe(time.time() - start_time)
         return RoutingResult(
             peer=self.default_peer,
             agent_id=self.default_agent_id,

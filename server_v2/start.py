@@ -48,6 +48,32 @@ logging.basicConfig(
 log = logging.getLogger("agentwire")
 
 
+# v2.2.0: Structured logging + Prometheus metrics
+
+import structlog
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+
+
+def _configure_structlog() -> None:
+    """Configure structlog for JSON output in production."""
+    structlog.configure(
+        processors=[
+            structlog.stdlib.filter_by_level,
+            structlog.stdlib.add_logger_name,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.PositionalArgumentsFormatter(),
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.UnicodeDecoder(),
+            structlog.processors.JSONRenderer()
+        ],
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Parts normalization — A2A protocol compat layer
 # ---------------------------------------------------------------------------
@@ -141,14 +167,21 @@ async def health_endpoint(request: Request) -> Response:
     return JSONResponse({"status": "ok", "service": "agentwire-core", "version": __version__})
 
 
+async def metrics_endpoint(request: Request) -> Response:
+    """Prometheus metrics endpoint."""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
 async def root_endpoint(request: Request) -> Response:
     return JSONResponse({
-        "service": "AgentWire Gateway v2.0",
+        "service": "AgentWire Gateway v2.2",
+        "version": __version__,
         "endpoints": {
             "agent_card": "/.well-known/agent.json",
             "agent_card_alt": "/.well-known/agent-card.json",
             "jsonrpc": "/a2a/jsonrpc",
             "health": "/health",
+            "metrics": "/metrics",
         },
     })
 
@@ -343,6 +376,7 @@ def main():
     custom_routes = [
         Route("/.well-known/agent.json", _agent_card_alt, methods=["GET"]),
         Route("/health", health_endpoint, methods=["GET"]),
+        Route("/metrics", metrics_endpoint, methods=["GET"]),
         Route("/", root_endpoint, methods=["GET"]),
     ]
 
@@ -351,11 +385,11 @@ def main():
     if cors_origins:
         log.info("CORS origins: %s", cors_origins)
 
-    # Auth middleware
+    # Auth middleware (exclude /metrics for Prometheus scrape)
     token_middleware = Middleware(
         BearerTokenMiddleware,
         tokens=tokens,
-        exclude_paths=["/.well-known/agent.json", "/.well-known/agent-card.json", "/health", "/"],
+        exclude_paths=["/.well-known/agent.json", "/.well-known/agent-card.json", "/health", "/metrics", "/"],
     )
 
     middlewares = [token_middleware]
@@ -380,10 +414,11 @@ def main():
     # Start
     import uvicorn
 
-    log.info("AgentWire Gateway v2.0 starting on %s:%d", host, port)
+    log.info("AgentWire Gateway v2.2 starting on %s:%d", host, port)
     log.info("  Agent Card: http://%s:%d/.well-known/agent.json", host, port)
     log.info("  Agent Card (alt): http://%s:%d/.well-known/agent-card.json", host, port)
     log.info("  JSON-RPC:   http://%s:%d/a2a/jsonrpc", host, port)
+    log.info("  Metrics:    http://%s:%d/metrics", host, port)
 
     uvicorn.run(
         app,

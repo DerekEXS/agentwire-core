@@ -15,6 +15,17 @@ from a2a.types import ListTasksRequest, ListTasksResponse, Task, TaskState
 
 log = logging.getLogger("agentwire.task_store")
 
+# v2.2.0: Prometheus metrics
+try:
+    from prometheus_client import Counter
+    _task_state_total = Counter(
+        "a2a_task_state_total",
+        "Task state transitions",
+        ["state"]
+    )
+except ImportError:
+    _task_state_total = None  # type: ignore
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks (
     task_id      TEXT PRIMARY KEY,
@@ -60,6 +71,9 @@ class SqliteTaskStore(A2ATaskStore):
 
     async def save(self, task: Task, context: ServerCallContext) -> None:
         """Persist task to SQLite."""
+        state_name = TaskState.Name(task.status.state)
+        if _task_state_total:
+            _task_state_total.labels(state=state_name).inc()
         async with self._lock:
             conn = self._connect()
             try:
@@ -70,7 +84,7 @@ class SqliteTaskStore(A2ATaskStore):
                     (
                         task.id,
                         task.context_id,
-                        TaskState.Name(task.status.state),
+                        state_name,
                         task.SerializeToString().hex() if hasattr(task, 'SerializeToString') else '',
                         _now(),
                         _now(),

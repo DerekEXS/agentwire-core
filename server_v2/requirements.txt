@@ -5,3 +5,5 @@ starlette>=0.40.0
 uvicorn>=0.30.0
 sse-starlette>=0.1.0
 PyYAML>=6.0
+structlog>=24.1.0
+prometheus-client>=0.20.0

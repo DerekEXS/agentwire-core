@@ -37,6 +37,23 @@ from .agent_router import AgentRouter
 
 log = logging.getLogger("agentwire.executor")
 
+# v2.2.0: Prometheus metrics
+try:
+    from prometheus_client import Counter, Histogram
+    _dispatch_total = Counter(
+        "a2a_dispatch_total",
+        "Total message dispatch attempts",
+        ["peer", "status"]
+    )
+    _message_duration = Histogram(
+        "a2a_message_duration_seconds",
+        "Time to route and dispatch a message",
+        ["peer", "agent_id", "rule_name"]
+    )
+except ImportError:
+    _dispatch_total = None  # type: ignore
+    _message_duration = None  # type: ignore
+
 
 def _now_timestamp():
     from google.protobuf.timestamp_pb2 import Timestamp
@@ -101,6 +118,9 @@ class GatewayExecutor(AgentExecutor):
         3. Dispatch message to agent
         4. Collect response and publish events
         """
+        import time
+        start_time = time.time()
+
         task_id = context.task_id or uuid.uuid4().hex[:12]
         context_id = context.context_id or ""
 
@@ -135,8 +155,12 @@ class GatewayExecutor(AgentExecutor):
                 context_id=context_id,
                 task_id=task_id,
             )
+            if _dispatch_total:
+                _dispatch_total.labels(peer=result.peer, status="success").inc()
         except Exception as e:
             log.exception("dispatch failed for task %s: %s", task_id, e)
+            if _dispatch_total:
+                _dispatch_total.labels(peer=result.peer, status="error").inc()
             await event_queue.enqueue_event(TaskStatusUpdateEvent(
                 task_id=task_id,
                 context_id=context_id,
@@ -151,6 +175,14 @@ class GatewayExecutor(AgentExecutor):
                 ),
             ))
             return
+
+        # Record duration metric
+        if _message_duration:
+            _message_duration.labels(
+                peer=result.peer,
+                agent_id=result.agent_id,
+                rule_name=result.rule_name
+            ).observe(time.time() - start_time)
 
         # Publish completion (task mode: message embedded in status update)
         await event_queue.enqueue_event(TaskStatusUpdateEvent(
