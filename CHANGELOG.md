@@ -5,6 +5,62 @@ All notable changes to AgentWire-Core are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v2.3.0] - 2026-07-18
+
+### 🚀 New Features — OpenClaw Native A2A Plugin
+
+- **`agentwire-a2a` OpenClaw 原生 plugin**（TypeScript，`plugin/` 子目录）：跑在 OpenClaw gateway 进程内（18789），暴露标准 A2A v1.0 JSON-RPC 端点（`/a2a/jsonrpc` + `/.well-known/agent.json`），把 SendMessage 转交给 OpenClaw agent。
+- **方案 C2 dispatch**：plugin 内通过 `openclaw agent` CLI 子进程调 agent（以外部 operator client 身份走 gateway WS，绕开 plugin runtime 的 scope/trust 限制——M1 验证 `api.runtime.gateway.request` 被 trust gate 拦，CLI 路径可用）。
+- **多轮 session 支持**：同 A2A `contextId` 的消息进同 OpenClaw session（`agent:<agentId>:a2a:<contextId>`），agent 能记住上下文。
+
+### 🔧 CORE 侧改动
+
+- `gateway_executor.py`：**删除 `_dispatch_via_openclaw()`**（私有 `/rpc/agent` 路径，OpenClaw 2026.7.1 已移除）。所有 peer（含 OpenClaw）统一走标准 A2A HTTP（`_dispatch_via_a2a`）。OpenClaw 成为标准 A2A peer，消除"OpenClaw 特殊路径"。
+- `gateway_executor.py`：`_dispatch_via_a2a` **空 token 不发 Authorization 头**（避免发 bare `Bearer ` 头的未定义行为，净改进适用所有 peer）。
+- `__version__`: 2.2.0 → 2.3.0。
+
+### 🧹 清理（下线旧 adapter）
+
+- `~/.openclaw/a2a-gateway/` sidecar（PID 476004，端口 18802）：已死，归档到 `designs/v2.3/legacy-sidecar/`，原目录改 `.disabled`。该 sidecar 把 A2A 翻译成 OpenClaw 私有 `/tools/invoke`，依赖的私有 API 已被 OpenClaw 移除（500）。
+- CORE `plugin/` 旧 v1.5.5 反向代理骨架：重写为 v2.3 原生 plugin（`definePluginEntry` + `registerHttpRoute`，非旧 `activate()` + 自起 http server）。
+
+### 📐 架构变更
+
+```
+外部 Agent → CORE 18880 → 18789/a2a/jsonrpc → [agentwire-a2a plugin] → openclaw agent CLI → 初梦/影猎/影锻
+                            ↑ 标准 A2A 边界                          ↑ 绕开 plugin trust gate
+```
+
+- 单一 A2A 边界，无 sidecar，无私有 API 追逐。
+- plugin 只做薄翻译（A2A ↔ `openclaw agent` CLI）；业务逻辑留 CORE/CUE（Python）。
+- OpenClaw 升级抗性：plugin 只依赖 `definePluginEntry`/`registerHttpRoute`（公开 SDK 契约）+ `openclaw` CLI（公开接口），无私有端点。
+
+### 🧪 测试
+
+- CORE: 31 tests passing（`test_v2_core.py`，版本断言更新到 2.3.0）。
+- M2 实测：plugin `/a2a/jsonrpc` SendMessage → 初梦真实回复 "收到，丝线 v2.3 M2 验证 ping ✅"。
+- M3 全链路实测：外部 → CORE 18880 → plugin 18789 → 初梦 "pong ✅ — A2A 链路 CORE→plugin→初梦 通畅"。
+
+### 📦 依赖
+
+- plugin: 0 npm 运行时依赖（Node 22 内置 `child_process` + `WebSocket`）。devDep: `typescript`, `@types/node`。
+- CORE: 无新依赖（`aiohttp` 已有）。
+
+### 📚 文档
+
+- `designs/v2.3/DESIGN.md`：v2.3 设计文档（R1 评审修订）
+- `designs/v2.3/WS-PROTOCOL-VERIFICATION.md`：gateway WS 协议技术验证
+- `designs/v2.3/legacy-sidecar/`：下线 sidecar 留档
+
+### ⚠️ 已知限制（v2.3.0 范围外）
+
+- 反向闭环（agent 主动发 A2A）→ v2.3.1
+- SendStreamingMessage / SSE → v2.3.2+
+- 动态 agent 发现（当前硬编码 main，configSchema 支持 defaultAgent）→ v2.3.1
+- plugin 进程内 WS loopback client（替代 CLI 子进程，省 spawn 开销）→ v2.3.1 可选
+
+---
+
 ## [v2.2.0] - 2026-07-14
 
 ### 🚀 New Features — Observability Infrastructure

@@ -212,14 +212,11 @@ class GatewayExecutor(AgentExecutor):
     ) -> str:
         """Dispatch message to target agent.
 
-        For local OpenClaw agents, uses Gateway RPC (WebSocket).
-        For remote A2A peers, uses standard A2A HTTP message/send.
+        v2.3: All peers (including OpenClaw) dispatch via standard A2A HTTP.
+        OpenClaw exposes /a2a/jsonrpc through the agentwire-a2a plugin (running
+        inside the OpenClaw gateway process); the private /rpc/agent endpoint
+        was removed in OpenClaw 2026.7.1. No more OpenClaw-special path.
         """
-        # Try OpenClaw Gateway RPC first for local agents
-        if peer == "openclaw" or peer == self._peers.get("openclaw", {}).get("url", ""):
-            return await self._dispatch_via_openclaw(agent_id, text, metadata, context_id, task_id)
-
-        # Try direct A2A to known peer
         peer_info = self._peers.get(peer, {})
         peer_url = peer_info.get("url", "")
         if peer_url:
@@ -233,49 +230,6 @@ class GatewayExecutor(AgentExecutor):
             f"Task: {task_id}\n"
             f"Context: {context_id}"
         )
-
-    async def _dispatch_via_openclaw(
-        self,
-        agent_id: str,
-        text: str,
-        metadata: dict | None,
-        context_id: str,
-        task_id: str,
-    ) -> str:
-        """Dispatch to an OpenClaw agent via Gateway RPC.
-
-        Uses the OpenClaw gateway's HTTP API to send a message
-        and wait for the agent's response.
-        """
-        payload = {
-            "agentId": agent_id,
-            "message": text,
-            "sessionKey": context_id or task_id,
-            "deliver": False,
-        }
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                headers = {"Content-Type": "application/json"}
-                if self._openclaw_token:
-                    headers["Authorization"] = f"Bearer {self._openclaw_token}"
-
-                async with session.post(
-                    f"{self._openclaw_url}/rpc/agent",
-                    json=payload,
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=300),
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        return data.get("text", data.get("response", json.dumps(data)))
-                    log.warning("OpenClaw dispatch HTTP %d", resp.status)
-                    body = await resp.text()
-                    return f"OpenClaw agent '{agent_id}' returned HTTP {resp.status}: {body[:500]}"
-        except asyncio.TimeoutError:
-            return f"OpenClaw agent '{agent_id}' timed out after 300s"
-        except aiohttp.ClientError as e:
-            return f"OpenClaw agent '{agent_id}' connection error: {e}"
 
     async def _dispatch_via_a2a(
         self,
@@ -313,11 +267,14 @@ class GatewayExecutor(AgentExecutor):
 
         try:
             async with aiohttp.ClientSession() as session:
+                # v2.3: empty token → no Authorization header (loopback no-auth peers).
+                # Avoids sending a bare "Bearer " header (undefined behavior on peer side).
                 headers = {
                     "Content-Type": "application/json",
-                    "Authorization": f"Bearer {peer_token}",
                     "A2A-Version": "1.0",
                 }
+                if peer_token:
+                    headers["Authorization"] = f"Bearer {peer_token}"
                 async with session.post(
                     f"{peer_url}/a2a/jsonrpc",
                     json=payload,

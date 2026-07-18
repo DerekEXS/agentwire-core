@@ -100,6 +100,8 @@ peers:
   cue-worker:
     url: "http://127.0.0.1:18801"
     description: "AgentWire CUE workflow engine"
+    # v2.1.1: token required by CUE inbound auth
+    token_file: "/run/secrets/cue-admin-token.txt"
 
   # v2.0.2: remote peer — fill in actual URL and token_file path in deployment
   # Replace <remote-peer-url> with your peer's actual A2A endpoint

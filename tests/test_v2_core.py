@@ -28,7 +28,7 @@ class TestAgentCard:
     def test_card_name_and_version(self):
         card = build_agent_card()
         assert card.name == "AgentWire Gateway"
-        assert card.version == "2.2.0"
+        assert card.version == "2.3.0"
 
     def test_card_has_jsonrpc_interface(self):
         card = build_agent_card()

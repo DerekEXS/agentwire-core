@@ -49,6 +49,8 @@ plugin/package-lock.json.bak
 
 # ===== Backup / temp =====
 *.bak
+*.bak-*
+server_v2/config.yaml.bak-*
 *.swp
 *.swo
 *.orig

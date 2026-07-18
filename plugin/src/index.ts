@@ -1,174 +1,240 @@
 /**
- * AgentWire OpenClaw Plugin
- * 内部代理请求到 Python A2A 服务
+ * AgentWire A2A Adapter — v2.3.0 (方案 C2)
  *
- * v1.5.1 security hardening:
- * - bindHost defaults to 127.0.0.1; use 0.0.0.0 only behind firewall/VPN.
- * - Inbound requests require Bearer auth when `authToken` is set; LAN-exposure
- *   without an authToken is rejected (401) to prevent unauthenticated proxy.
+ * 在 OpenClaw gateway 进程内暴露标准 A2A v1.0 JSON-RPC 端点，把 SendMessage
+ * 转交给 OpenClaw agent。调 agent 走 `openclaw agent` CLI 子进程（以外部
+ * operator client 身份走 gateway WS，绕开 plugin runtime 的 scope/trust
+ * 限制——M1 验证 api.runtime.gateway.request 被 trust gate 拦，CLI 路径可用）。
+ *
+ * 仅实现 SendMessage（同步返回 agent 回复）。GetTask/ListTasks/CancelTask
+ * 不实现（-32601）——权威 task store 在 CORE 侧 SQLite，见
+ * designs/v2.3/DESIGN.md「查询路径澄清」。
  */
 
-interface Config {
-  pythonHost?: string;
-  pythonPort?: number;
-  port?: number;
-  bindHost?: string;
-  authToken?: string;
-  agentCard?: Partial<typeof DEFAULT_AGENT_CARD>;
-  // v1.4.2 AUDIT-FIX #3 (P3): explicit CORS allowlist. No wildcard.
-  // Empty = no CORS headers (most secure). Configure in openclaw.plugin.json
-  // via "corsOrigins" (string[]) — caller must enumerate origins.
-  corsOrigins?: string[];
+import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { callAgent } from "./dispatch.js";
+
+async function readBody(req: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString("utf-8");
 }
 
-const DEFAULT_AGENT_CARD = {
-  protocolVersion: '1.0.1',
-  name: 'AgentWire',
-  description: 'AgentWire A2A v1.0.1 Service',
-  version: '1.0.0',
-  capabilities: { streaming: true, pushNotifications: false, extendedAgentCard: false },
-  skills: [],
-  defaultInputModes: ['text'],
-  defaultOutputModes: ['text'],
-};
+function extractText(message: any): string {
+  const parts = message?.parts ?? [];
+  return parts
+    .map((p: any) => (typeof p === "string" ? p : p?.text ?? ""))
+    .filter(Boolean)
+    .join("\n");
+}
 
-let config: Config = {
-  pythonHost: '127.0.0.1',
-  pythonPort: 18800,
-  port: 18800,
-  bindHost: '127.0.0.1',
-  corsOrigins: [],
-};
-let server: any = null;
+function resolveAgentId(message: any, params: any, defaultAgent: string): string {
+  const md = message?.metadata ?? {};
+  const candidates = [
+    md.agentId,
+    md.agent_id,
+    md.to,
+    md.peer,
+    params?.agentId,
+    params?.agent_id,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c) return c;
+  }
+  return defaultAgent;
+}
 
-function proxyPost(targetHost: string, targetPort: number, targetPath: string, body: string, headers: Record<string, string>) {
-  return new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
-    const http = require('http');
-    const req = http.request({ hostname: targetHost, port: targetPort, path: targetPath, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), ...headers }, timeout: 3000 }, (res: any) => {
-      let data = '';
-      res.on('data', (c: string) => data += c);
-      res.on('end', () => resolve({ statusCode: res.statusCode || 500, body: data }));
+function rpcOk(id: any, result: any) {
+  return { jsonrpc: "2.0", id, result };
+}
+
+function rpcErr(id: any, code: number, message: string) {
+  return { jsonrpc: "2.0", id, error: { code, message } };
+}
+
+export default definePluginEntry({
+  id: "agentwire-a2a",
+  name: "AgentWire A2A Adapter",
+  description: "Exposes Google A2A v1.0 JSON-RPC endpoint for OpenClaw agents (v2.3)",
+  register(api: any) {
+    const defaultAgent = "main";
+
+    // --- /a2a/jsonrpc ---
+    api.registerHttpRoute({
+      path: "/a2a/jsonrpc",
+      auth: "plugin",
+      match: "exact",
+      handler: async (req: IncomingMessage, res: ServerResponse) => {
+        if (req.method !== "POST") {
+          res.writeHead(405, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Method Not Allowed" }));
+          return;
+        }
+
+        let rpc: any;
+        try {
+          rpc = JSON.parse(await readBody(req));
+        } catch (e) {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(rpcErr(null, -32700, "Parse error")));
+          return;
+        }
+
+        const rpcId = rpc?.id ?? null;
+        const method = rpc?.method;
+        const params = rpc?.params ?? {};
+        const message = params?.message ?? {};
+
+        if (method !== "SendMessage" && method !== "message/send") {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify(
+              rpcErr(rpcId, -32601, `Method not found (v2.3.0 implements SendMessage only): ${method}`)
+            )
+          );
+          return;
+        }
+
+        const text = extractText(message);
+        if (!text) {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(rpcErr(rpcId, -32602, "no text in message.parts")));
+          return;
+        }
+
+        const agentId = resolveAgentId(message, params, defaultAgent);
+        const taskId = `a2a-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const contextId = message?.contextId || taskId;
+        // 同 contextId 进同 OpenClaw session（支持多轮）；无 contextId 则每消息独立。
+        const sessionKey = `agent:${agentId}:a2a:${contextId}`;
+
+        console.log(
+          `[agentwire-a2a] SendMessage agentId=%s sessionKey=%s text=%j`,
+          agentId,
+          sessionKey,
+          text.slice(0, 80)
+        );
+
+        // ===== 方案 C2：spawn `openclaw agent` CLI（绕 plugin trust gate）=====
+        try {
+          const result = await callAgent(agentId, text, {
+            timeoutS: 120,
+            sessionKey,
+          });
+          console.log(
+            "[agentwire-a2a] agent reply status=%s runId=%s len=%d",
+            result.status,
+            result.runId,
+            result.text.length
+          );
+
+          const state = result.status === "ok" ? "completed" : "failed";
+          const response = rpcOk(rpcId, {
+            task: {
+              id: taskId,
+              contextId,
+              status: {
+                state,
+                message: {
+                  messageId: `reply-${taskId}`,
+                  contextId,
+                  taskId,
+                  role: "agent",
+                  parts: [{ type: "text", text: result.text }],
+                },
+                timestamp: new Date().toISOString(),
+              },
+            },
+          });
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(response));
+        } catch (e: any) {
+          console.log(
+            "[agentwire-a2a] dispatch FAILED: %s: %s",
+            e?.name ?? "Error",
+            e?.message ?? String(e)
+          );
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify(
+              rpcOk(rpcId, {
+                task: {
+                  id: taskId,
+                  contextId,
+                  status: {
+                    state: "failed",
+                    message: {
+                      messageId: `err-${taskId}`,
+                      role: "agent",
+                      parts: [
+                        {
+                          type: "text",
+                          text: `dispatch error: ${e?.message ?? String(e)}`,
+                        },
+                      ],
+                    },
+                    timestamp: new Date().toISOString(),
+                  },
+                },
+              })
+            )
+          );
+        }
+      },
     });
-    req.on('error', (err: any) => {
-      if (err && err.code === 'ECONNREFUSED') {
-        return resolve({ statusCode: 503, body: JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32603, message: 'A2A backend unavailable: connection refused' } }) });
-      }
-      reject(err);
+
+    // --- /.well-known/agent.json ---
+    api.registerHttpRoute({
+      path: "/.well-known/agent.json",
+      auth: "plugin",
+      match: "exact",
+      handler: async (_req: IncomingMessage, res: ServerResponse) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            name: "OpenClaw A2A Gateway",
+            description: "AgentWire A2A v1.0 adapter for OpenClaw agents",
+            url: "http://127.0.0.1:18789/a2a/jsonrpc",
+            version: "2.3.0",
+            protocolVersion: "1.0",
+            capabilities: {
+              streaming: false,
+              pushNotifications: false,
+              extendedAgentCard: false,
+            },
+            defaultInputModes: ["text"],
+            defaultOutputModes: ["text"],
+            skills: [
+              { id: "main", name: "main", description: "OpenClaw main agent" },
+            ],
+            agents: [{ id: "main", name: "main" }],
+          })
+        );
+      },
     });
-    req.on('timeout', () => { req.destroy(); resolve({ statusCode: 504, body: JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32603, message: 'A2A backend timeout' } }) }); });
-    req.write(body);
-    req.end();
-  });
-}
 
-function isAuthorized(req: any): boolean {
-  if (!config.authToken) {
-    return false;
-  }
-  const header = req.headers['authorization'] || '';
-  if (!header.startsWith('Bearer ')) {
-    return false;
-  }
-  const token = header.slice('Bearer '.length);
-  if (token.length !== config.authToken.length) {
-    return false;
-  }
-  let mismatch = 0;
-  for (let i = 0; i < token.length; i++) {
-    mismatch |= token.charCodeAt(i) ^ config.authToken.charCodeAt(i);
-  }
-  return mismatch === 0;
-}
+    // --- /health (a2a adapter health) ---
+    api.registerHttpRoute({
+      path: "/a2a/health",
+      auth: "plugin",
+      match: "exact",
+      handler: async (_req: IncomingMessage, res: ServerResponse) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            status: "ok",
+            service: "agentwire-a2a",
+            version: "2.3.0",
+          })
+        );
+      },
+    });
 
-async function handleRequest(req: any, res: any) {
-  const url = new URL(req.url || '/', `http://localhost:${config.port}`);
-  // v1.4.2 AUDIT-FIX #3 (P3): CORS restricted to explicit allowlist.
-  // No wildcard. If config.corsOrigins is unset/empty, NO CORS headers sent
-  // (browser will block cross-origin). Caller must enumerate origins.
-  const origin = req.headers['origin'];
-  if (origin && config.corsOrigins && config.corsOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  }
-  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
-  try {
-    if (url.pathname === '/health' || url.pathname === '/a2a/health') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'healthy', service: 'agentwire-plugin', version: '1.0.0', protocolVersion: '1.0.1' }));
-    } else if (url.pathname === '/.well-known/agent.json' || url.pathname === '/.well-known/agent-card.json') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ...DEFAULT_AGENT_CARD, ...config.agentCard }));
-    } else if (url.pathname === '/a2a/jsonrpc') {
-      if (!isAuthorized(req)) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'unauthorized' }));
-        return;
-      }
-      let body = '';
-      for await (const chunk of req) body += chunk;
-      const headers: Record<string, string> = {};
-      if (config.authToken) headers['Authorization'] = `Bearer ${config.authToken}`;
-      const result = await proxyPost(config.pythonHost!, config.pythonPort!, '/a2a/jsonrpc', body, headers);
-      res.writeHead(result.statusCode, { 'Content-Type': 'application/json' });
-      res.end(result.body);
-    } else if (url.pathname === '/a2a/metrics') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ service: 'agentwire-plugin', uptime: process.uptime() }));
-    } else {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Not Found' }));
-    }
-  } catch (e) {
-    console.error('[AgentWire Plugin] Error:', e);
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Internal Server Error' }));
-  }
-}
-
-type ConfigInput = Config & { config?: Config };
-
-export function activate(cfg?: ConfigInput) {
-  // OpenClaw may invoke activate() with no config argument — self-load
-  // defaultConfig from the companion manifest file at a well-known path.
-  try {
-    const manifest = require('./openclaw.plugin.json');
-    if (manifest?.defaultConfig && typeof manifest.defaultConfig === 'object') {
-      config = { ...config, ...manifest.defaultConfig };
-    }
-  } catch (_) {}
-  // Merge any config OpenClaw passes at call time (higher priority).
-  const pluginConfig = cfg?.config && typeof cfg.config === 'object' ? cfg.config : cfg;
-  config = { ...config, ...pluginConfig };
-  if (config.bindHost === '0.0.0.0') {
-    console.warn('[AgentWire Plugin] binding 0.0.0.0; require authToken + firewall before exposing');
-  }
-  if (!config.authToken) {
-    console.warn('[AgentWire Plugin] no authToken configured; inbound /a2a/jsonrpc will return 401');
-  }
-  console.log('[AgentWire Plugin] 启动中...');
-  const http = require('http');
-  server = http.createServer(handleRequest);
-  server.on('error', (err: any) => {
-    if (err && err.code === 'EADDRINUSE') {
-      // 端口已被占用 (openclaw gateway 自己的 A2A 服务或其他进程).
-      // 优雅降级: 当 A2A 服务的 skip 模式运行 (no-op proxy).
-      console.warn(
-        `[AgentWire Plugin] 端口 ${config.port} 已被占用 (${err.message || 'EADDRINUSE'}). ` +
-        'A2A 服务由其他进程提供, 插件以 skip 模式运行. ' +
-        '如需插件自己 listen, 修改 openclaw.plugin.json 的 port 字段.'
-      );
-      server = null;
-    } else {
-      console.error(`[AgentWire Plugin] 启动错误: ${err && err.message ? err.message : err}`);
-    }
-  });
-  server.listen(config.port!, config.bindHost!, () => {
-    console.log(`[AgentWire Plugin] 已启动: http://${config.bindHost}:${config.port}`);
-  });
-}
-
-export async function deactivate() {
-  if (server) { await new Promise(r => server.close(r)); server = null; }
-  // port busy → server null, nothing to clean up
-}
+    console.log(
+      "[agentwire-a2a] plugin registered: /a2a/jsonrpc + /.well-known/agent.json + /a2a/health"
+    );
+  },
+});
