@@ -9,7 +9,7 @@
 [![许可证](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org)
 [![Node](https://img.shields.io/badge/node-18%2B-green)](https://nodejs.org)
-[![状态](https://img.shields.io/badge/status-v2.0.1-green)](https://github.com/DerekEXS/agentwire-core/releases/tag/v2.0.1)
+[![状态](https://img.shields.io/badge/status-v2.3.0-green)](https://github.com/DerekEXS/agentwire-core/releases/tag/v2.3.0)
 
 ---
 

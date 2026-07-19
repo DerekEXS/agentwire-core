@@ -33,7 +33,7 @@ OpenClaw agent 集体报「Gateway 进程 476004 不存在」。诊断链：
 写一个 **OpenClaw 原生 plugin**（`@agentwire/a2a-adapter`），跑在 OpenClaw gateway 进程内（18789），用 plugin SDK 公开契约暴露标准 A2A v1.0，用 `gateway.request("agent")` 进程内调 agent。**单一 A2A 边界，无 sidecar，无私有 API 追逐。**
 
 ```
-外部 Agent ──► CORE 18880 ──► 18789/a2a/jsonrpc ──► [原生 plugin] ──► gateway.request("agent") ──► 初梦/影猎/影锻
+外部 Agent ──► CORE 18880 ──► 18789/a2a/jsonrpc ──► [原生 plugin] ──► gateway.request("agent") ──► agent-main/agent-hound/agent-forge
                                   ↑ 标准 A2A 边界（稳定）              ↑ plugin SDK 公开契约
 ```
 
@@ -248,9 +248,9 @@ if peer_token:
 
 ## ✅ 验收标准
 
-1. **入站闭环**：`curl POST http://127.0.0.1:18789/a2a/jsonrpc -d '{"method":"SendMessage","params":{"message":{...,"parts":[{"text":"ping"}]}}}'` → 返回 A2A Task COMPLETED，`parts[].text` = 初梦真实回复（非 404/非 passthrough）。
+1. **入站闭环**：`curl POST http://127.0.0.1:18789/a2a/jsonrpc -d '{"method":"SendMessage","params":{"message":{...,"parts":[{"text":"ping"}]}}}'` → 返回 A2A Task COMPLETED，`parts[].text` = agent-main真实回复（非 404/非 passthrough）。
 2. **CORE→plugin 路由**：外部 Agent 经 CORE 18880 SendMessage，CORE 日志 `routed to agent=main peer=openclaw`，plugin 调 `gateway.request("agent")` 成功，外部 Agent 收到真实回复。
-3. **agent 选择**：`metadata.agentId=vidhound` → 回复来自影猎；缺省 → main（初梦）。
+3. **agent 选择**：`metadata.agentId=vidhound` → 回复来自agent-hound；缺省 → main（agent-main）。
 4. **agent card**：`GET http://127.0.0.1:18789/.well-known/agent.json` 返回含 `agents:[main,vidhound,vidforge]` 的标准 card。
 5. **无 sidecar**：`ps aux | grep a2a-gateway` 无结果；`ss -tlnp | grep 18802` 无监听。
 6. **CORE 测试**：`pytest tests/test_v2_core.py` 全绿（`_dispatch_via_openclaw` 删除后相关测试改走 `_dispatch_via_a2a`）。
@@ -287,7 +287,7 @@ if peer_token:
 
 | # | 里程碑 | 验证物 | 阻断下一阶段？ |
 |---|--------|--------|---------------|
-| M1 | **可行性 spike**：10 行 plugin 验证 `gateway.request("agent")` 进程内可用 + 回复字段名 | `curl 18789/a2a/jsonrpc` 拿到初梦回复，`console.log` 打全量 result 确认字段 | **是**（若失败转 subagent.run fallback） |
+| M1 | **可行性 spike**：10 行 plugin 验证 `gateway.request("agent")` 进程内可用 + 回复字段名 | `curl 18789/a2a/jsonrpc` 拿到agent-main回复，`console.log` 打全量 result 确认字段 | **是**（若失败转 subagent.run fallback） |
 | M2 | plugin 主体：SendMessage + agent card + auth 校验 | M1 验收 + agent 选择 + auth 空/非空两种行为 | 否 |
 | M3 | CORE 改动：peers.openclaw 加路径 + 删 `_dispatch_via_openclaw` + 空token不发头 | CORE 全链路经 plugin 通，外部 Agent 收到真实回复 | 否 |
 | M4 | 清理：下线 18802 sidecar + silk-bridge + 旧 v1.5.5 骨架 | 验收标准 5/6/7/9 | 否 |
@@ -329,7 +329,7 @@ curl -X POST http://127.0.0.1:18789/a2a/jsonrpc -H "Content-Type: application/js
 
 > ⚠️ `--link` 要求路径在 OpenClaw 运行期间稳定（`/mnt/d/项目/A2A/` 是 WSL2 挂载，稳定）。若 plugin 迭代频繁，`--link` 免每次重新 install；改 `dist/` 后需 OpenClaw 重载 plugin。
 >
-> 远端 Pawly（47.109.25.89）不装此 plugin——plugin 只在 OpenClaw 所在本机（AI-Claw）。Pawly 经 Tailscale 打 CORE 18880，CORE 再路由到本机 plugin。
+> 远端 Pawly（<pawly-host>）不装此 plugin——plugin 只在 OpenClaw 所在本机（AI-Claw）。Pawly 经 Tailscale 打 CORE 18880，CORE 再路由到本机 plugin。
 
 ---
 

@@ -16,7 +16,7 @@ A2A methods implemented:
   - ListTasks    -> returns recent tasks
   - CancelTask   -> marks task cancelled
 
-Auth: Bearer token (OfH8VcYaNUmuT3ZwWSP5nyjv, matches peers.openclaw token)
+Auth: Bearer token (<a2a-token>, matches peers.openclaw token)
 
 This is the "OpenClaw-side A2A adapter" referenced in:
   /home/AIKali/.openclaw/workspace/skills/agentwire/SKILL.md
@@ -39,9 +39,9 @@ from typing import Any, Dict, List, Optional
 # -----------------------------------------------------------------------------
 # Configuration (env-overridable)
 # -----------------------------------------------------------------------------
-A2A_TOKEN = os.environ.get("A2A_TOKEN", "OfH8VcYaNUmuT3ZwWSP5nyjv")
+A2A_TOKEN = os.environ.get("A2A_TOKEN", "<a2a-token>")
 OPENCLAW_URL = os.environ.get("OPENCLAW_URL", "http://127.0.0.1:18789")
-OPENCLAW_TOKEN = os.environ.get("OPENCLAW_TOKEN", "16a40d2a51fc383c542c62dc0d494db6f4c28ed6040ae391")
+OPENCLAW_TOKEN = os.environ.get("OPENCLAW_TOKEN", "<gateway-auth-token>")
 BIND_HOST = os.environ.get("BIND_HOST", "0.0.0.0")
 BIND_PORT = int(os.environ.get("BIND_PORT", "18802"))
 LOG_FILE = os.environ.get("LOG_FILE", "/home/AIKali/.openclaw/a2a-gateway/a2a-gateway.log")

@@ -16,15 +16,19 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 /**
- * openclaw 二进制路径。execFile 不走 shell，不查 PATH，所以需要绝对路径。
- * 优先 env var，fallback 本机默认安装路径。
- * 可经 plugin config 覆盖（见 index.ts register 时注入）。
+ * openclaw 二进制路径。
+ *
+ * 默认 `"openclaw"` 依赖 PATH 解析（Node execFile 在 file 不含路径分隔符时
+ * 会查 PATH）。plugin 跑在 OpenClaw gateway 进程内，该进程的 PATH 通常含
+ * openclaw 所在目录（它自己从那里启动），所以 PATH 解析可靠。
+ *
+ * 覆盖优先级：plugin config > env AGENTWIRE_OPENCLAW_BIN > PATH 解析。
  */
 function resolveOpenclawBin(configBin?: string): string {
   if (configBin && configBin.trim()) return configBin.trim();
   const envBin = process.env.AGENTWIRE_OPENCLAW_BIN;
   if (envBin && envBin.trim()) return envBin.trim();
-  return "/home/AIKali/.local/bin/openclaw";
+  return "openclaw";
 }
 
 export interface CallAgentOptions {

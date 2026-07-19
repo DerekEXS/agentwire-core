@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 📐 架构变更
 
 ```
-外部 Agent → CORE 18880 → 18789/a2a/jsonrpc → [agentwire-a2a plugin] → openclaw agent CLI → 初梦/影猎/影锻
+外部 Agent → CORE 18880 → 18789/a2a/jsonrpc → [agentwire-a2a plugin] → openclaw agent CLI → agent-main/agent-hound/agent-forge
                             ↑ 标准 A2A 边界                          ↑ 绕开 plugin trust gate
 ```
 
@@ -38,8 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 🧪 测试
 
 - CORE: 31 tests passing（`test_v2_core.py`，版本断言更新到 2.3.0）。
-- M2 实测：plugin `/a2a/jsonrpc` SendMessage → 初梦真实回复 "收到，丝线 v2.3 M2 验证 ping ✅"。
-- M3 全链路实测：外部 → CORE 18880 → plugin 18789 → 初梦 "pong ✅ — A2A 链路 CORE→plugin→初梦 通畅"。
+- M2 实测：plugin `/a2a/jsonrpc` SendMessage → agent-main 真实回复 "收到，丝线 v2.3 M2 验证 ping ✅"。
+- M3 全链路实测：外部 → CORE 18880 → plugin 18789 → agent-main "pong ✅ — A2A 链路 CORE→plugin→agent 通畅"。
 
 ### 📦 依赖
 
